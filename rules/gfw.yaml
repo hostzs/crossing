@@ -8,7 +8,6 @@
 # PROCESS-NAME: 1
 # TOTAL: 203
 payload:
-  - DOMAIN-SUFFIX,github.com
   - DOMAIN-SUFFIX,xn--9kqz23b19z.com
   - DOMAIN-SUFFIX,xn--mes358aby2apfg.com
   #- IP-CIDR,13.32.0.0/15
