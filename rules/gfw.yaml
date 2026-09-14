@@ -1,0 +1,15 @@
+# NAME: gfw
+# AUTHOR: edward
+# REPO: https://github.com/blackmatrix7/ios_rule_script
+# UPDATED: 2026-09-14 19:16:56
+# DOMAIN-KEYWORD: 1
+# DOMAIN-SUFFIX: 186
+# IP-CIDR: 15
+# PROCESS-NAME: 1
+# TOTAL: 203
+payload:
+  - DOMAIN-SUFFIX,github.com
+  - DOMAIN-SUFFIX,赔钱.com
+  - DOMAIN-SUFFIX,良心云.com
+  #- IP-CIDR,13.32.0.0/15
+  
