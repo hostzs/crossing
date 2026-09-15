@@ -1,3 +1,7 @@
 #!/bin/bash
 
-echo "Hello World"
+echo "开始执行 crossing.sh"
+
+date > update.txt
+
+echo "更新完成"
