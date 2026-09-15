@@ -119,7 +119,7 @@ SOURCE_SHA256=$(sha256sum "$SOURCE" | awk '{print $1}')
 # 更新时间
 # ============================================================
 
-UPDATED=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+UPDATED=$(TZ="Asia/Shanghai" date +"%Y-%m-%d %H:%M:%S CST")
 
 # ============================================================
 # 生成 proxy.yaml
