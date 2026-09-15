@@ -16,8 +16,7 @@ grep "\.com$" /tmp/source.txt > proxy.txt
 
 echo "处理完成"
 
-echo "direct.txt："
-wc -l direct.txt
+echo "原始数据行数："
+wc -l /tmp/source.txt
 
-echo "proxy.txt："
-wc -l proxy.txt
+echo "生成 direct.txt"
