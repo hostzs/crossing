@@ -7,15 +7,14 @@ google.com
 youtube.com
 baidu.com
 github.com
+google.com
+baidu.com
 googleapis.com
+github.com
 EOF
 
-echo "筛选 google 相关域名"
+echo "开始排序和去重"
 
-grep "google" source.txt > update.txt
-
-echo "修改规则格式"
-
-sed -i 's/google/google-test/g' update.txt
+sort source.txt | uniq > update.txt
 
 echo "处理完成"
