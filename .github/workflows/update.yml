@@ -16,14 +16,14 @@ jobs:
     steps:
 
       # ========================================
-      # Checkout
+      # 1. Checkout
       # ========================================
 
       - name: Checkout
         uses: actions/checkout@v4
 
       # ========================================
-      # 获取 Mihomo 最新稳定版
+      # 2. 获取 Mihomo 最新稳定版本
       # ========================================
 
       - name: Get latest Mihomo version
@@ -44,10 +44,11 @@ jobs:
           fi
 
           echo "Mihomo 最新稳定版：$VERSION"
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       # ========================================
-      # 检查是否需要构建
+      # 3. 检查是否需要构建
       # ========================================
 
       - name: Check changes
@@ -83,28 +84,32 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
 
             echo "手动运行，强制生成"
+
             echo "changed=true" >> "$GITHUB_OUTPUT"
 
           elif [ "$CURRENT_HASH" != "$OLD_HASH" ]; then
 
             echo "manual-proxy.list 有变化"
+
             echo "changed=true" >> "$GITHUB_OUTPUT"
 
           elif [ "$CURRENT_VERSION" != "$OLD_VERSION" ]; then
 
             echo "Mihomo 有新版本"
+
             echo "changed=true" >> "$GITHUB_OUTPUT"
 
           else
 
             echo "规则和 Mihomo 都没有变化"
             echo "无需重新生成"
+
             echo "changed=false" >> "$GITHUB_OUTPUT"
 
           fi
 
       # ========================================
-      # 安装 Mihomo
+      # 4. 安装 Mihomo
       # ========================================
 
       - name: Install latest stable Mihomo
@@ -118,8 +123,13 @@ jobs:
 
           URL="https://github.com/MetaCubeX/mihomo/releases/download/${VERSION}/${FILE}"
 
-          echo "下载 Mihomo：$VERSION"
+          echo "========================================"
+          echo "安装 Mihomo"
+          echo "========================================"
+          echo
+          echo "版本：$VERSION"
           echo "文件：$FILE"
+          echo
 
           wget -q --show-progress "$URL"
 
@@ -136,48 +146,113 @@ jobs:
           mihomo -v
 
       # ========================================
-      # 构建规则
+      # 5. 构建规则
       # ========================================
 
       - name: Build proxy rules
         if: steps.check.outputs.changed == 'true'
         run: |
+          set -e
+
           chmod +x scripts/build.sh
+
           ./scripts/build.sh
 
       # ========================================
-      # 保存 Mihomo 版本
+      # 6. 保存 Mihomo 版本
       # ========================================
 
       - name: Save Mihomo version
         if: steps.check.outputs.changed == 'true'
         run: |
+          set -e
+
           echo "${{ steps.mihomo.outputs.version }}" > output/.mihomo-version
 
+          echo "保存 Mihomo 版本："
+          cat output/.mihomo-version
+
       # ========================================
-      # 判断实际 Git 变化
+      # 7. 判断是否真正需要提交
+      #
+      # 规则：
+      #
+      # 如果 SOURCE SHA256 没变
+      # 并且 Mihomo 版本没变
+      #
+      # 那么即使 build.sh 修改了 UPDATED 时间，
+      # 也不能因此产生提交。
       # ========================================
 
       - name: Check generated files
         if: steps.check.outputs.changed == 'true'
         id: generated
         run: |
+          set -e
+
+          SOURCE="sources/manual-proxy.list"
+          OUTPUT="output/proxy.yaml"
+          VERSION_FILE="output/.mihomo-version"
+
+          CURRENT_HASH=$(sha256sum "$SOURCE" | awk '{print $1}')
+
+          OLD_HASH=$(git show HEAD:"$OUTPUT" 2>/dev/null \
+            | grep "^# SOURCE-SHA256:" \
+            | sed 's/^# SOURCE-SHA256: //' \
+            || true)
+
+          CURRENT_VERSION="${{ steps.mihomo.outputs.version }}"
+
+          OLD_VERSION=$(git show HEAD:"$VERSION_FILE" 2>/dev/null || true)
+
           echo "========================================"
           echo "检查生成结果"
           echo "========================================"
+          echo
+          echo "当前规则 SHA256：$CURRENT_HASH"
+          echo "旧规则 SHA256：$OLD_HASH"
+          echo
+          echo "当前 Mihomo：$CURRENT_VERSION"
+          echo "旧 Mihomo：$OLD_VERSION"
+          echo
 
-          git status --short
+          # ----------------------------------------
+          # 情况 1：
+          # 规则没变化 + Mihomo 没变化
+          #
+          # 这意味着本次如果有 diff，
+          # 只能是 UPDATED 时间变化。
+          #
+          # 不提交。
+          # ----------------------------------------
 
-          if git diff --quiet && git diff --cached --quiet; then
-            echo "没有文件变化"
+          if [ "$CURRENT_HASH" = "$OLD_HASH" ] && \
+             [ "$CURRENT_VERSION" = "$OLD_VERSION" ]; then
+
+            echo "规则和 Mihomo 都没有变化"
+            echo "本次变化仅可能来自 UPDATED 时间"
+            echo "不提交"
+
             echo "commit=false" >> "$GITHUB_OUTPUT"
+
           else
-            echo "检测到文件变化"
+
+            # ----------------------------------------
+            # 情况 2：
+            # 规则或 Mihomo 发生变化
+            #
+            # 允许提交。
+            # ----------------------------------------
+
+            echo "规则或 Mihomo 发生变化"
+            echo "允许提交"
+
             echo "commit=true" >> "$GITHUB_OUTPUT"
+
           fi
 
       # ========================================
-      # 提交
+      # 8. 提交
       # ========================================
 
       - name: Commit changes
@@ -185,23 +260,34 @@ jobs:
         run: |
           set -e
 
+          echo "========================================"
+          echo "提交生成结果"
+          echo "========================================"
+
           git config user.name "github-actions[bot]"
+
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add output/proxy.yaml \
-                  output/proxy.list \
-                  output/proxy.mrs \
-                  output/.mihomo-version
+          git add \
+            output/proxy.yaml \
+            output/proxy.list \
+            output/proxy.mrs \
+            output/.mihomo-version
 
           if git diff --cached --quiet; then
+
             echo "生成结果没有变化，不需要提交"
+
           else
+
             git commit -m "update proxy rules"
+
             git push
+
           fi
 
       # ========================================
-      # 没有变化
+      # 9. 没有变化
       # ========================================
 
       - name: No changes
