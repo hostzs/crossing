@@ -2,6 +2,6 @@
 
 echo "开始执行 crossing.sh"
 
-date > update.txt
+curl -L -o update.txt https://example.com
 
-echo "更新完成"
+echo "下载完成"
