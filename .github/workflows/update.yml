@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
 
   schedule:
-    # 每天北京时间 08:00 执行
-    # GitHub cron 使用 UTC，所以北京时间 08:00 = UTC 00:00
-    - cron: "0 18 * * *"
+    # 每天 UTC 00:00 运行
+    # 北京时间 08:00
+    - cron: "0 0 * * *"
 
 permissions:
   contents: write
@@ -17,18 +17,22 @@ jobs:
 
     steps:
 
-      # ----------------------------------------
+      # ==================================================
       # 1. 获取仓库
-      # ----------------------------------------
+      # ==================================================
+
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ----------------------------------------
-      # 2. 检查 manual-proxy.list 是否变化
-      # ----------------------------------------
+
+      # ==================================================
+      # 2. 检查 manual-proxy.list 是否发生变化
+      # ==================================================
+
       - name: Check source changes
         id: check
         run: |
+
           SOURCE="sources/manual-proxy.list"
           OUTPUT="output/proxy.yaml"
 
@@ -38,45 +42,83 @@ jobs:
             | sed 's/^# SOURCE-SHA256: //' \
             || true)
 
-          echo "当前 SHA256：$CURRENT_HASH"
-          echo "旧 SHA256：$OLD_HASH"
+          echo "========================================"
+          echo "检查规则源"
+          echo "========================================"
 
+          echo "当前 SHA256："
+          echo "$CURRENT_HASH"
+
+          echo ""
+          echo "旧 SHA256："
+          echo "$OLD_HASH"
+
+          echo ""
+
+          # 手动执行：强制重新生成
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "手动运行，强制生成"
+
+            echo "手动运行"
+            echo "强制重新生成"
+
             echo "changed=true" >> "$GITHUB_OUTPUT"
 
+          # SHA256 不一样：源文件发生变化
           elif [ "$CURRENT_HASH" != "$OLD_HASH" ]; then
-            echo "manual-proxy.list 有变化"
+
+            echo "manual-proxy.list 已发生变化"
+
             echo "changed=true" >> "$GITHUB_OUTPUT"
 
+          # SHA256 一样：无需生成
           else
+
             echo "manual-proxy.list 没有变化"
+
             echo "changed=false" >> "$GITHUB_OUTPUT"
+
           fi
 
-      # ----------------------------------------
+
+      # ==================================================
       # 3. 生成规则
-      # ----------------------------------------
-      - name: Build proxy.yaml
+      # ==================================================
+
+      - name: Build proxy rules
         if: steps.check.outputs.changed == 'true'
         run: |
+
           chmod +x scripts/build.sh
+
           ./scripts/build.sh
 
-      # ----------------------------------------
+
+      # ==================================================
       # 4. 提交生成结果
-      # ----------------------------------------
+      # ==================================================
+
       - name: Commit changes
         if: steps.check.outputs.changed == 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add output/proxy.yaml
+          git config user.name "github-actions[bot]"
+
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            output/proxy.yaml \
+            output/proxy.list
 
           if git diff --cached --quiet; then
-            echo "生成结果没有变化，不需要提交"
+
+            echo "生成结果没有变化"
+            echo "不需要提交"
+
           else
+
             git commit -m "update proxy rules"
+
             git push
+
           fi
