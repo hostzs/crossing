@@ -15,6 +15,15 @@ grep -c "\.com$" /tmp/source.txt
 echo ".cn 数量："
 grep -c "\.cn$" /tmp/source.txt
 
+echo ".net 数量："
+grep -c "\.net$" /tmp/source.txt
+
+echo ".org 数量："
+grep -c "\.org$" /tmp/source.txt
+
+echo ".io 数量："
+grep -c "\.io$" /tmp/source.txt
+
 echo "生成 direct.txt"
 
 grep "^google" /tmp/source.txt > direct.txt
