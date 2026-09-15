@@ -14,4 +14,8 @@ echo "筛选 google 相关域名"
 
 grep "google" source.txt > update.txt
 
+echo "修改规则格式"
+
+sed -i 's/google/google-test/g' update.txt
+
 echo "处理完成"
