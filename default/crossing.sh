@@ -6,6 +6,9 @@ curl -L -o /tmp/source.txt https://raw.githubusercontent.com/iflyelf/gwf/main/di
 
 echo "下载完成"
 
+echo "原始数据行数："
+wc -l /tmp/source.txt
+
 echo "生成 direct.txt"
 
 grep "^google" /tmp/source.txt > direct.txt
@@ -16,7 +19,8 @@ grep "\.com$" /tmp/source.txt > proxy.txt
 
 echo "处理完成"
 
-echo "原始数据行数："
-wc -l /tmp/source.txt
+echo "direct.txt："
+wc -l direct.txt
 
-echo "生成 direct.txt"
+echo "proxy.txt："
+wc -l proxy.txt
