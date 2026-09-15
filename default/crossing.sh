@@ -11,7 +11,7 @@ wc -l source.txt
 
 echo "搜索 google 相关域名"
 
-grep "google" source.txt > update.txt
+grep "^google" source.txt > update.txt
 
 echo "搜索完成"
 
