@@ -2,131 +2,108 @@
 
 set -e
 
-SOURCE="sources/manual-proxy.list"
-OUTPUT_YAML="output/proxy.yaml"
-OUTPUT_LIST="output/proxy.list"
-
 echo "========================================"
 echo "Crossing Rule Builder"
 echo "========================================"
 
+SOURCE="sources/manual-proxy.list"
+OUTPUT_YAML="output/proxy.yaml"
+OUTPUT_LIST="output/proxy.list"
+OUTPUT_MRS="output/proxy.mrs"
+
 echo "原始数据：$SOURCE"
 echo "输出 YAML：$OUTPUT_YAML"
 echo "输出 TEXT：$OUTPUT_LIST"
+echo "输出 MRS：$OUTPUT_MRS"
 echo ""
 
 python3 <<'PY'
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
+import subprocess
+import sys
 
 SOURCE = Path("sources/manual-proxy.list")
 OUTPUT_YAML = Path("output/proxy.yaml")
 OUTPUT_LIST = Path("output/proxy.list")
+OUTPUT_MRS = Path("output/proxy.mrs")
+
+# ============================================================
+# 读取原始文件
+# ============================================================
+
+raw = SOURCE.read_text(encoding="utf-8")
+
+source_hash = hashlib.sha256(
+    raw.encode("utf-8")
+).hexdigest()
+
+lines = raw.splitlines()
 
 domains = []
 
-# ============================================================
-# 1. 读取源文件
-# ============================================================
+for line in lines:
+    line = line.strip()
 
-with SOURCE.open("r", encoding="utf-8") as f:
-    for line in f:
+    # 跳过空行
+    if not line:
+        continue
 
-        # 去除首尾空白
-        line = line.strip()
+    # 跳过注释
+    if line.startswith("#"):
+        continue
 
-        # 空行
-        if not line:
-            continue
+    # 如果用户误写成 DOMAIN-SUFFIX,example.com
+    # 自动提取域名
+    if "," in line:
+        parts = line.split(",", 1)
 
-        # 整行注释
-        if line.startswith("#"):
-            continue
+        if parts[0].strip().upper() == "DOMAIN-SUFFIX":
+            line = parts[1].strip()
 
-        # 去除行尾注释
-        if "#" in line:
-            line = line.split("#", 1)[0].strip()
-
-        if not line:
-            continue
-
-        # ====================================================
-        # 2. 清理 URL
-        # ====================================================
-
-        if "://" in line:
-            line = line.split("://", 1)[1]
-
-        # 去掉路径
-        line = line.split("/", 1)[0]
-
-        # 去掉端口
-        if ":" in line and not line.startswith("["):
-            line = line.split(":", 1)[0]
-
-        # ====================================================
-        # 3. 基础标准化
-        # ====================================================
-
-        line = line.strip().lower().rstrip(".")
-
-        if not line:
-            continue
-
+    if line:
         domains.append(line)
 
 print(f"读取域名：{len(domains)}")
 
-
 # ============================================================
-# 4. IDN → Punycode
+# IDN → Punycode
 # ============================================================
 
-normalized = []
+converted = []
 
 for domain in domains:
-
     try:
-        domain = domain.encode("idna").decode("ascii")
-    except UnicodeError:
-        print(f"警告：无法转换 IDN：{domain}")
+        domain = domain.rstrip(".").encode("idna").decode("ascii")
+    except Exception as e:
+        print(f"警告：无法转换域名：{domain}")
+        print(f"原因：{e}")
         continue
 
-    normalized.append(domain)
+    converted.append(domain.lower())
 
-print(f"IDN 转换后：{len(normalized)}")
-
+print(f"IDN 转换后：{len(converted)}")
 
 # ============================================================
-# 5. 去重 + 排序
+# 去重 + 排序
 # ============================================================
 
-domains = sorted(set(normalized))
+domains = sorted(set(converted))
 
 print(f"去重后：{len(domains)}")
-
-
-# ============================================================
-# 6. 计算源文件 SHA256
-# ============================================================
-
-source_hash = hashlib.sha256(
-    SOURCE.read_bytes()
-).hexdigest()
-
+print("")
 
 # ============================================================
-# 7. 生成时间
+# 时间
 # ============================================================
 
-updated = datetime.now().astimezone().strftime(
-    "%Y-%m-%d %H:%M:%S"
+updated = datetime.now(timezone.utc).strftime(
+    "%Y-%m-%d %H:%M:%S UTC"
 )
 
-
 # ============================================================
-# 8. 生成 proxy.yaml
+# 生成 YAML
 # ============================================================
 
 yaml_lines = []
@@ -146,16 +123,10 @@ yaml_lines.append("payload:")
 for domain in domains:
     yaml_lines.append(f"  - {domain}")
 
-OUTPUT_YAML.parent.mkdir(parents=True, exist_ok=True)
-
-OUTPUT_YAML.write_text(
-    "\n".join(yaml_lines) + "\n",
-    encoding="utf-8"
-)
-
+yaml_content = "\n".join(yaml_lines) + "\n"
 
 # ============================================================
-# 9. 生成 proxy.list
+# 生成纯文本 LIST
 # ============================================================
 
 list_lines = []
@@ -163,20 +134,52 @@ list_lines = []
 for domain in domains:
     list_lines.append(domain)
 
-OUTPUT_LIST.write_text(
-    "\n".join(list_lines) + "\n",
+list_content = "\n".join(list_lines) + "\n"
+
+# ============================================================
+# 写入 YAML / LIST
+# ============================================================
+
+OUTPUT_YAML.parent.mkdir(parents=True, exist_ok=True)
+
+OUTPUT_YAML.write_text(
+    yaml_content,
     encoding="utf-8"
 )
 
+OUTPUT_LIST.write_text(
+    list_content,
+    encoding="utf-8"
+)
 
-# ============================================================
-# 10. 输出结果
-# ============================================================
+print("YAML 和 TEXT 生成完成")
 
-print("")
-print("生成完成：")
-print(f"  域名数量：{len(domains)}")
-print(f"  SHA256：{source_hash}")
-print(f"  YAML：{OUTPUT_YAML}")
-print(f"  TEXT：{OUTPUT_LIST}")
 PY
+
+# ============================================================
+# 使用 Mihomo 生成 MRS
+# ============================================================
+
+echo ""
+echo "开始生成 MRS..."
+
+if ! command -v mihomo >/dev/null 2>&1; then
+    echo "错误：找不到 mihomo"
+    exit 1
+fi
+
+mihomo convert-ruleset domain text \
+  "$OUTPUT_LIST" \
+  "$OUTPUT_MRS"
+
+# ============================================================
+# 完成
+# ============================================================
+
+echo ""
+echo "生成完成："
+echo "  域名数量：$(grep -cve '^[[:space:]]*$' "$OUTPUT_LIST")"
+echo "  SHA256：$(sha256sum "$SOURCE" | awk '{print $1}')"
+echo "  YAML：$OUTPUT_YAML"
+echo "  TEXT：$OUTPUT_LIST"
+echo "  MRS：$OUTPUT_MRS"
