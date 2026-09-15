@@ -1,168 +1,82 @@
-#!/bin/bash
+name: Update Proxy Rules
 
-set -e
+on:
+  workflow_dispatch:
 
-SOURCE="sources/manual-proxy.list"
-OUTPUT="output/proxy.yaml"
+  schedule:
+    # 每天北京时间 08:00 执行
+    # GitHub cron 使用 UTC，所以北京时间 08:00 = UTC 00:00
+    - cron: "0 18 * * *"
 
-echo "========================================"
-echo "Crossing Rule Builder"
-echo "========================================"
+permissions:
+  contents: write
 
-echo "原始数据：$SOURCE"
-echo "输出文件：$OUTPUT"
-echo ""
+jobs:
+  update:
+    runs-on: ubuntu-latest
 
-python3 <<'PY'
-from pathlib import Path
-from datetime import datetime
-import hashlib
+    steps:
 
-SOURCE = Path("sources/manual-proxy.list")
-OUTPUT = Path("output/proxy.yaml")
+      # ----------------------------------------
+      # 1. 获取仓库
+      # ----------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
 
-# --------------------------------------------------
-# 读取原始数据
-# --------------------------------------------------
+      # ----------------------------------------
+      # 2. 检查 manual-proxy.list 是否变化
+      # ----------------------------------------
+      - name: Check source changes
+        id: check
+        run: |
+          SOURCE="sources/manual-proxy.list"
+          OUTPUT="output/proxy.yaml"
 
-domains = []
+          CURRENT_HASH=$(sha256sum "$SOURCE" | awk '{print $1}')
 
-with SOURCE.open("r", encoding="utf-8") as f:
-    for line in f:
-        line = line.strip()
+          OLD_HASH=$(grep "^# SOURCE-SHA256:" "$OUTPUT" 2>/dev/null \
+            | sed 's/^# SOURCE-SHA256: //' \
+            || true)
 
-        # 忽略空行
-        if not line:
-            continue
+          echo "当前 SHA256：$CURRENT_HASH"
+          echo "旧 SHA256：$OLD_HASH"
 
-        # 忽略注释
-        if line.startswith("#"):
-            continue
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "手动运行，强制生成"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
 
-        # 去掉行内注释
-        if "#" in line:
-            line = line.split("#", 1)[0].strip()
+          elif [ "$CURRENT_HASH" != "$OLD_HASH" ]; then
+            echo "manual-proxy.list 有变化"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
 
-        if not line:
-            continue
+          else
+            echo "manual-proxy.list 没有变化"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
-        # 去掉可能出现的协议
-        if "://" in line:
-            line = line.split("://", 1)[1]
+      # ----------------------------------------
+      # 3. 生成规则
+      # ----------------------------------------
+      - name: Build proxy.yaml
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          chmod +x scripts/build.sh
+          ./scripts/build.sh
 
-        # 去掉 URL 路径
-        line = line.split("/", 1)[0]
+      # ----------------------------------------
+      # 4. 提交生成结果
+      # ----------------------------------------
+      - name: Commit changes
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        # 去掉端口
-        if ":" in line and not line.startswith("["):
-            line = line.split(":", 1)[0]
+          git add output/proxy.yaml
 
-        line = line.strip().lower().rstrip(".")
-
-        if not line:
-            continue
-
-        domains.append(line)
-
-
-print(f"读取域名：{len(domains)}")
-
-
-# --------------------------------------------------
-# IDN → Punycode
-# --------------------------------------------------
-
-normalized = []
-
-for domain in domains:
-    try:
-        # Python 内置 IDNA 编码
-        domain = domain.encode("idna").decode("ascii")
-    except UnicodeError:
-        print(f"警告：无法转换 IDN：{domain}")
-        continue
-
-    normalized.append(domain)
-
-
-print(f"IDN 转换后：{len(normalized)}")
-
-
-# --------------------------------------------------
-# 去重
-# --------------------------------------------------
-
-domains = sorted(set(normalized))
-
-print(f"去重后：{len(domains)}")
-
-
-# --------------------------------------------------
-# 计算源文件 SHA256
-#
-# 用于 GitHub Actions 判断
-# manual-proxy.list 是否发生变化
-# --------------------------------------------------
-
-source_hash = hashlib.sha256(
-    SOURCE.read_bytes()
-).hexdigest()
-
-
-# --------------------------------------------------
-# 生成时间
-#
-# 使用北京时间
-# --------------------------------------------------
-
-updated = datetime.now().astimezone().strftime(
-    "%Y-%m-%d %H:%M:%S"
-)
-
-
-# --------------------------------------------------
-# 生成 YAML
-# --------------------------------------------------
-
-lines = []
-
-lines.append("# NAME: proxy")
-lines.append("# AUTHOR: edward")
-lines.append("# REPO: https://github.com/hostzs/crossing")
-lines.append(f"# UPDATED: {updated}")
-lines.append("# DOMAIN-KEYWORD: 0")
-lines.append(f"# DOMAIN-SUFFIX: {len(domains)}")
-lines.append("# IP-CIDR: 0")
-lines.append("# PROCESS-NAME: 0")
-lines.append(f"# TOTAL: {len(domains)}")
-lines.append(f"# SOURCE-SHA256: {source_hash}")
-lines.append("")
-lines.append("payload:")
-
-for domain in domains:
-    lines.append(f"  - DOMAIN-SUFFIX,{domain}")
-
-
-# --------------------------------------------------
-# 写入文件
-# --------------------------------------------------
-
-OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-
-OUTPUT.write_text(
-    "\n".join(lines) + "\n",
-    encoding="utf-8"
-)
-
-
-print("")
-print("生成完成：")
-print(f"  域名数量：{len(domains)}")
-print(f"  SHA256：{source_hash}")
-print(f"  输出：{OUTPUT}")
-PY
-
-echo ""
-echo "========================================"
-echo "处理完成"
-echo "========================================"
+          if git diff --cached --quiet; then
+            echo "生成结果没有变化，不需要提交"
+          else
+            git commit -m "update proxy rules"
+            git push
+          fi
