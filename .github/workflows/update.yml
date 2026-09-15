@@ -94,7 +94,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add output/proxy.yaml output/proxy.list
+          git add output/proxy.yaml output/proxy.list output/proxy.mrs
 
           if git diff --cached --quiet; then
             echo "生成结果没有变化，不需要提交"
