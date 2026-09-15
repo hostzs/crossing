@@ -9,6 +9,12 @@ echo "下载完成"
 echo "原始数据行数："
 wc -l /tmp/source.txt
 
+echo ".com 数量："
+grep -c "\.com$" /tmp/source.txt
+
+echo ".cn 数量："
+grep -c "\.cn$" /tmp/source.txt
+
 echo "生成 direct.txt"
 
 grep "^google" /tmp/source.txt > direct.txt
