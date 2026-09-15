@@ -9,5 +9,10 @@ echo "下载完成"
 echo "总行数："
 wc -l source.txt
 
-echo "前 20 行："
-head -20 source.txt
+echo "搜索 google 相关域名"
+
+grep "google" source.txt > update.txt
+
+echo "搜索完成"
+
+cat update.txt
