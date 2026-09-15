@@ -16,3 +16,6 @@ grep "^google.*com$" source.txt > update.txt
 echo "搜索完成"
 
 cat update.txt
+
+echo "检查重复域名"
+sort source.txt | uniq -d | head -20
