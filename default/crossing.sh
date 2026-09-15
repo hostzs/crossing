@@ -2,7 +2,7 @@
 
 echo "开始下载"
 
-curl -L -o source.txt https://raw.githubusercontent.com/iflyelf/gwf/main/direct.txt
+curl -L -o /tmp/source.txt https://raw.githubusercontent.com/iflyelf/gwf/main/direct.txt
 
 echo "下载完成"
 
