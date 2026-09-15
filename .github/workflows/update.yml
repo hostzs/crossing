@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
   schedule:
-    - cron: "0 16 * * *"
+    - cron: "0 0 * * *"
 
 permissions:
   contents: write
@@ -15,8 +15,16 @@ jobs:
 
     steps:
 
+      # ========================================
+      # Checkout
+      # ========================================
+
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ========================================
+      # 获取 Mihomo 最新稳定版
+      # ========================================
 
       - name: Get latest Mihomo version
         id: mihomo
@@ -38,9 +46,15 @@ jobs:
           echo "Mihomo 最新稳定版：$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      # ========================================
+      # 检查是否需要构建
+      # ========================================
+
       - name: Check changes
         id: check
         run: |
+          set -e
+
           SOURCE="sources/manual-proxy.list"
           OUTPUT="output/proxy.yaml"
           VERSION_FILE="output/.mihomo-version"
@@ -55,27 +69,43 @@ jobs:
 
           OLD_VERSION=$(cat "$VERSION_FILE" 2>/dev/null || true)
 
+          echo "========================================"
+          echo "检查更新"
+          echo "========================================"
+          echo
           echo "当前规则 SHA256：$CURRENT_HASH"
           echo "旧规则 SHA256：$OLD_HASH"
+          echo
           echo "当前 Mihomo：$CURRENT_VERSION"
           echo "旧 Mihomo：$OLD_VERSION"
+          echo
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+
             echo "手动运行，强制生成"
             echo "changed=true" >> "$GITHUB_OUTPUT"
 
           elif [ "$CURRENT_HASH" != "$OLD_HASH" ]; then
+
             echo "manual-proxy.list 有变化"
             echo "changed=true" >> "$GITHUB_OUTPUT"
 
           elif [ "$CURRENT_VERSION" != "$OLD_VERSION" ]; then
+
             echo "Mihomo 有新版本"
             echo "changed=true" >> "$GITHUB_OUTPUT"
 
           else
+
             echo "规则和 Mihomo 都没有变化"
+            echo "无需重新生成"
             echo "changed=false" >> "$GITHUB_OUTPUT"
+
           fi
+
+      # ========================================
+      # 安装 Mihomo
+      # ========================================
 
       - name: Install latest stable Mihomo
         if: steps.check.outputs.changed == 'true'
@@ -85,6 +115,7 @@ jobs:
           VERSION="${{ steps.mihomo.outputs.version }}"
 
           FILE="mihomo-linux-amd64-v1-${VERSION}.gz"
+
           URL="https://github.com/MetaCubeX/mihomo/releases/download/${VERSION}/${FILE}"
 
           echo "下载 Mihomo：$VERSION"
@@ -97,10 +128,16 @@ jobs:
           BINARY="${FILE%.gz}"
 
           chmod +x "$BINARY"
+
           sudo mv "$BINARY" /usr/local/bin/mihomo
 
+          echo
           echo "安装完成："
           mihomo -v
+
+      # ========================================
+      # 构建规则
+      # ========================================
 
       - name: Build proxy rules
         if: steps.check.outputs.changed == 'true'
@@ -108,18 +145,53 @@ jobs:
           chmod +x scripts/build.sh
           ./scripts/build.sh
 
+      # ========================================
+      # 保存 Mihomo 版本
+      # ========================================
+
       - name: Save Mihomo version
         if: steps.check.outputs.changed == 'true'
         run: |
           echo "${{ steps.mihomo.outputs.version }}" > output/.mihomo-version
 
-      - name: Commit changes
+      # ========================================
+      # 判断实际 Git 变化
+      # ========================================
+
+      - name: Check generated files
         if: steps.check.outputs.changed == 'true'
+        id: generated
         run: |
+          echo "========================================"
+          echo "检查生成结果"
+          echo "========================================"
+
+          git status --short
+
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "没有文件变化"
+            echo "commit=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "检测到文件变化"
+            echo "commit=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ========================================
+      # 提交
+      # ========================================
+
+      - name: Commit changes
+        if: steps.check.outputs.changed == 'true' && steps.generated.outputs.commit == 'true'
+        run: |
+          set -e
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add output/proxy.yaml output/proxy.list output/proxy.mrs output/.mihomo-version
+          git add output/proxy.yaml \
+                  output/proxy.list \
+                  output/proxy.mrs \
+                  output/.mihomo-version
 
           if git diff --cached --quiet; then
             echo "生成结果没有变化，不需要提交"
@@ -127,3 +199,19 @@ jobs:
             git commit -m "update proxy rules"
             git push
           fi
+
+      # ========================================
+      # 没有变化
+      # ========================================
+
+      - name: No changes
+        if: steps.check.outputs.changed == 'false'
+        run: |
+          echo "========================================"
+          echo "无需更新"
+          echo "========================================"
+          echo
+          echo "规则没有变化"
+          echo "Mihomo 没有变化"
+          echo "跳过构建"
+          echo "跳过提交"
