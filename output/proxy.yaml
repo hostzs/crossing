@@ -1,16 +1,17 @@
 # NAME: proxy
 # AUTHOR: edward
 # REPO: https://github.com/hostzs/crossing
-# UPDATED: 2026-09-15 06:34:56
+# UPDATED: 2026-09-15 06:40:10
 # BEHAVIOR: domain
 # FORMAT: yaml
-# DOMAIN: 11
-# TOTAL: 11
-# SOURCE-SHA256: 34d6eb8851edb3f2cf7bf04317ca6c8fd33bdc7441c7fbfb5b06347f96e68d57
+# DOMAIN: 12
+# TOTAL: 12
+# SOURCE-SHA256: d3c264da4af4b1472c12ddac8340dfec63a6f5b12ebf69032bb541c054bdb448
 
 payload:
   - dg4.org
   - eixeix.com
+  - example.com
   - fcvipaff.pro
   - getbn.net
   - idsduf.com
