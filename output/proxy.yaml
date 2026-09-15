@@ -1,13 +1,22 @@
-# NAME: gfw
+# NAME: proxy
 # AUTHOR: edward
-# REPO: https://github.com/blackmatrix7/ios_rule_script
-# UPDATED: 2026-09-14 19:16:56
-# DOMAIN-KEYWORD: 1
-# DOMAIN-SUFFIX: 186
-# IP-CIDR: 15
-# PROCESS-NAME: 1
-# TOTAL: 203
+# REPO: https://github.com/hostzs/crossing
+# UPDATED: 2026-09-15 06:34:56
+# BEHAVIOR: domain
+# FORMAT: yaml
+# DOMAIN: 11
+# TOTAL: 11
+# SOURCE-SHA256: 34d6eb8851edb3f2cf7bf04317ca6c8fd33bdc7441c7fbfb5b06347f96e68d57
+
 payload:
-  - DOMAIN-SUFFIX,xn--9kqz23b19z.com
-  - DOMAIN-SUFFIX,xn--mes358aby2apfg.com
-  
+  - dg4.org
+  - eixeix.com
+  - fcvipaff.pro
+  - getbn.net
+  - idsduf.com
+  - mao2-gw.top
+  - owdzmwy.com
+  - ssrdog.com
+  - xn--44q907fa2408a.com
+  - xn--9kqz23b19z.com
+  - xn--mes358aby2apfg.com
