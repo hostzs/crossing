@@ -6,16 +6,18 @@ curl -L -o source.txt https://raw.githubusercontent.com/iflyelf/gwf/main/direct.
 
 echo "下载完成"
 
-echo "总行数："
-wc -l source.txt
+echo "生成 direct.txt"
 
-echo "搜索 google 相关域名"
+grep "^google" source.txt > direct.txt
 
-sort source.txt | uniq > update.txt
+echo "生成 proxy.txt"
 
-echo "搜索完成"
+grep "\.com$" source.txt > proxy.txt
 
-cat update.txt
+echo "处理完成"
 
-echo "检查重复域名"
-sort source.txt | uniq -d | head -20
+echo "direct.txt："
+wc -l direct.txt
+
+echo "proxy.txt："
+wc -l proxy.txt
