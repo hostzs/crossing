@@ -1,4 +1,4 @@
-name: Test
+name: Test Crossing
 
 on:
   workflow_dispatch:
@@ -8,5 +8,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Hello
-        run: echo "Hello World"
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run crossing.sh
+        run: |
+          chmod +x default/crossing.sh
+          ./default/crossing.sh
