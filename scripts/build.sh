@@ -179,3 +179,4 @@ print(f"  域名数量：{len(domains)}")
 print(f"  SHA256：{source_hash}")
 print(f"  YAML：{OUTPUT_YAML}")
 print(f"  TEXT：{OUTPUT_LIST}")
+PY
