@@ -8,11 +8,11 @@ echo "下载完成"
 
 echo "生成 direct.txt"
 
-grep "^google" source.txt > direct.txt
+grep "^google" /tmp/source.txt > direct.txt
 
 echo "生成 proxy.txt"
 
-grep "\.com$" source.txt > proxy.txt
+grep "\.com$" /tmp/source.txt > proxy.txt
 
 echo "处理完成"
 
