@@ -1,20 +1,10 @@
 #!/bin/bash
 
-echo "开始执行"
+echo "开始下载真实数据"
 
-cat > source.txt <<EOF
-google.com
-youtube.com
-baidu.com
-github.com
-google.com
-baidu.com
-googleapis.com
-github.com
-EOF
+curl -L -o source.txt https://raw.githubusercontent.com/iflyelf/gwf/main/direct.txt
 
-echo "开始排序和去重"
+echo "下载完成"
 
-sort source.txt | uniq > update.txt
-
-echo "处理完成"
+echo "文件大小："
+wc -l source.txt
