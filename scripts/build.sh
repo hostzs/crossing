@@ -1,185 +1,267 @@
-#!/bin/bash
+#!/bin/sh
 
-set -e
+set -eu
+
+SOURCE="sources/manual-proxy.list"
+OUTPUT_DIR="output"
+
+OUTPUT_YAML="$OUTPUT_DIR/proxy.yaml"
+OUTPUT_LIST="$OUTPUT_DIR/proxy.list"
+OUTPUT_MRS="$OUTPUT_DIR/proxy.mrs"
 
 echo "========================================"
 echo "Crossing Rule Builder"
 echo "========================================"
 
-SOURCE="sources/manual-proxy.list"
-OUTPUT_YAML="output/proxy.yaml"
-OUTPUT_LIST="output/proxy.list"
-OUTPUT_MRS="output/proxy.mrs"
-
 echo "原始数据：$SOURCE"
 echo "输出 YAML：$OUTPUT_YAML"
 echo "输出 TEXT：$OUTPUT_LIST"
 echo "输出 MRS：$OUTPUT_MRS"
-echo ""
+echo
 
-python3 <<'PY'
-from pathlib import Path
-from datetime import datetime, timezone
-import hashlib
-import subprocess
+mkdir -p "$OUTPUT_DIR"
+
+# ============================================================
+# 保存旧输出，用于判断本次生成是否真的发生变化
+# ============================================================
+
+OLD_YAML=$(mktemp)
+OLD_LIST=$(mktemp)
+OLD_MRS=$(mktemp)
+
+cleanup() {
+    rm -f "$OLD_YAML" "$OLD_LIST" "$OLD_MRS"
+}
+
+trap cleanup EXIT
+
+[ -f "$OUTPUT_YAML" ] && cp "$OUTPUT_YAML" "$OLD_YAML"
+[ -f "$OUTPUT_LIST" ] && cp "$OUTPUT_LIST" "$OLD_LIST"
+[ -f "$OUTPUT_MRS" ] && cp "$OUTPUT_MRS" "$OLD_MRS"
+
+# ============================================================
+# 读取域名
+# ============================================================
+
+TMP_RAW=$(mktemp)
+
+grep -v '^[[:space:]]*$' "$SOURCE" \
+    | grep -v '^[[:space:]]*#' \
+    | sed 's/[[:space:]]*#.*$//' \
+    | sed 's/^[[:space:]]*//' \
+    | sed 's/[[:space:]]*$//' \
+    > "$TMP_RAW"
+
+# 兼容 DOMAIN-SUFFIX,example.com 写法
+sed -i 's/^DOMAIN-SUFFIX,//' "$TMP_RAW"
+
+RAW_COUNT=$(grep -c . "$TMP_RAW" || true)
+
+echo "读取域名：$RAW_COUNT"
+
+# ============================================================
+# IDN 转 Punycode
+# ============================================================
+
+TMP_IDN=$(mktemp)
+
+python3 - "$TMP_RAW" "$TMP_IDN" <<'PY'
 import sys
 
-SOURCE = Path("sources/manual-proxy.list")
-OUTPUT_YAML = Path("output/proxy.yaml")
-OUTPUT_LIST = Path("output/proxy.list")
-OUTPUT_MRS = Path("output/proxy.mrs")
+src = sys.argv[1]
+dst = sys.argv[2]
 
-# ============================================================
-# 读取原始文件
-# ============================================================
+count = 0
 
-raw = SOURCE.read_text(encoding="utf-8")
+with open(src, "r", encoding="utf-8") as f, \
+     open(dst, "w", encoding="utf-8") as out:
 
-source_hash = hashlib.sha256(
-    raw.encode("utf-8")
-).hexdigest()
+    for line in f:
+        domain = line.strip().lower()
 
-lines = raw.splitlines()
+        if not domain:
+            continue
 
-domains = []
+        try:
+            domain = domain.encode("idna").decode("ascii")
+        except Exception:
+            pass
 
-for line in lines:
-    line = line.strip()
+        domain = domain.rstrip(".")
 
-    # 跳过空行
-    if not line:
-        continue
+        if domain:
+            out.write(domain + "\n")
+            count += 1
 
-    # 跳过注释
-    if line.startswith("#"):
-        continue
-
-    # 如果用户误写成 DOMAIN-SUFFIX,example.com
-    # 自动提取域名
-    if "," in line:
-        parts = line.split(",", 1)
-
-        if parts[0].strip().upper() == "DOMAIN-SUFFIX":
-            line = parts[1].strip()
-
-    if line:
-        domains.append(line)
-
-print(f"读取域名：{len(domains)}")
-
-# ============================================================
-# IDN → Punycode
-# ============================================================
-
-converted = []
-
-for domain in domains:
-    try:
-        domain = domain.rstrip(".").encode("idna").decode("ascii")
-    except Exception as e:
-        print(f"警告：无法转换域名：{domain}")
-        print(f"原因：{e}")
-        continue
-
-    converted.append(domain.lower())
-
-print(f"IDN 转换后：{len(converted)}")
+print(f"IDN 转换后：{count}")
+PY
 
 # ============================================================
 # 去重 + 排序
 # ============================================================
 
-domains = sorted(set(converted))
+TMP_SORTED=$(mktemp)
 
-print(f"去重后：{len(domains)}")
-print("")
+sort -u "$TMP_IDN" > "$TMP_SORTED"
 
-# ============================================================
-# 时间
-# ============================================================
+DOMAIN_COUNT=$(grep -c . "$TMP_SORTED" || true)
 
-updated = datetime.now(timezone.utc).strftime(
-    "%Y-%m-%d %H:%M:%S UTC"
-)
+echo "去重后：$DOMAIN_COUNT"
+echo
 
 # ============================================================
-# 生成 YAML
+# SOURCE SHA256
 # ============================================================
 
-yaml_lines = []
-
-yaml_lines.append("# NAME: proxy")
-yaml_lines.append("# AUTHOR: edward")
-yaml_lines.append("# REPO: https://github.com/hostzs/crossing")
-yaml_lines.append(f"# UPDATED: {updated}")
-yaml_lines.append("# BEHAVIOR: domain")
-yaml_lines.append("# FORMAT: yaml")
-yaml_lines.append(f"# DOMAIN: {len(domains)}")
-yaml_lines.append(f"# TOTAL: {len(domains)}")
-yaml_lines.append(f"# SOURCE-SHA256: {source_hash}")
-yaml_lines.append("")
-yaml_lines.append("payload:")
-
-for domain in domains:
-    yaml_lines.append(f"  - {domain}")
-
-yaml_content = "\n".join(yaml_lines) + "\n"
+SOURCE_SHA256=$(sha256sum "$SOURCE" | awk '{print $1}')
 
 # ============================================================
-# 生成纯文本 LIST
+# 更新时间
 # ============================================================
 
-list_lines = []
-
-for domain in domains:
-    list_lines.append(domain)
-
-list_content = "\n".join(list_lines) + "\n"
+UPDATED=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
 # ============================================================
-# 写入 YAML / LIST
+# 生成 proxy.yaml
 # ============================================================
 
-OUTPUT_YAML.parent.mkdir(parents=True, exist_ok=True)
+{
+    echo "# NAME: proxy"
+    echo "# AUTHOR: edward"
+    echo "# REPO: https://github.com/hostzs/crossing"
+    echo "# UPDATED: $UPDATED"
+    echo "# SOURCE-SHA256: $SOURCE_SHA256"
+    echo "# COUNT: $DOMAIN_COUNT"
+    echo "#"
+    echo "# Generated by Crossing Rule Builder"
+    echo
 
-OUTPUT_YAML.write_text(
-    yaml_content,
-    encoding="utf-8"
-)
+    while IFS= read -r domain
+    do
+        echo "  - $domain"
+    done < "$TMP_SORTED"
 
-OUTPUT_LIST.write_text(
-    list_content,
-    encoding="utf-8"
-)
-
-print("YAML 和 TEXT 生成完成")
-
-PY
+} > "$OUTPUT_YAML"
 
 # ============================================================
-# 使用 Mihomo 生成 MRS
+# 生成 proxy.list
 # ============================================================
 
-echo ""
+{
+    echo "# NAME: proxy"
+    echo "# AUTHOR: edward"
+    echo "# REPO: https://github.com/hostzs/crossing"
+    echo "# UPDATED: $UPDATED"
+    echo "# SOURCE-SHA256: $SOURCE_SHA256"
+    echo "# COUNT: $DOMAIN_COUNT"
+    echo "#"
+
+    while IFS= read -r domain
+    do
+        echo "$domain"
+    done < "$TMP_SORTED"
+
+} > "$OUTPUT_LIST"
+
+echo "YAML 和 TEXT 生成完成"
+echo
+
+# ============================================================
+# 生成 MRS
+# ============================================================
+
 echo "开始生成 MRS..."
-
-if ! command -v mihomo >/dev/null 2>&1; then
-    echo "错误：找不到 mihomo"
-    exit 1
-fi
+echo
 
 mihomo convert-ruleset domain text \
-  "$OUTPUT_LIST" \
-  "$OUTPUT_MRS"
+    "$OUTPUT_LIST" \
+    "$OUTPUT_MRS"
+
+echo
 
 # ============================================================
-# 完成
+# 判断实际输出是否变化
 # ============================================================
 
-echo ""
+YAML_CHANGED=0
+LIST_CHANGED=0
+MRS_CHANGED=0
+
+if [ ! -f "$OLD_YAML" ] || ! cmp -s "$OUTPUT_YAML" "$OLD_YAML"; then
+    YAML_CHANGED=1
+fi
+
+if [ ! -f "$OLD_LIST" ] || ! cmp -s "$OUTPUT_LIST" "$OLD_LIST"; then
+    LIST_CHANGED=1
+fi
+
+if [ ! -f "$OLD_MRS" ] || ! cmp -s "$OUTPUT_MRS" "$OLD_MRS"; then
+    MRS_CHANGED=1
+fi
+
+# ============================================================
+# 如果只有 UPDATED 变化，则恢复旧文件
+# ============================================================
+
+if [ "$YAML_CHANGED" -eq 1 ] || \
+   [ "$LIST_CHANGED" -eq 1 ] || \
+   [ "$MRS_CHANGED" -eq 1 ]; then
+
+    echo "检测到输出内容变化："
+
+    if [ "$YAML_CHANGED" -eq 1 ]; then
+        echo "  proxy.yaml：变化"
+    else
+        echo "  proxy.yaml：无变化"
+    fi
+
+    if [ "$LIST_CHANGED" -eq 1 ]; then
+        echo "  proxy.list：变化"
+    else
+        echo "  proxy.list：无变化"
+    fi
+
+    if [ "$MRS_CHANGED" -eq 1 ]; then
+        echo "  proxy.mrs：变化"
+    else
+        echo "  proxy.mrs：无变化"
+    fi
+
+else
+
+    echo "输出内容没有变化"
+    echo "恢复旧文件，避免因为 UPDATED 时间产生无意义提交"
+
+    if [ -f "$OLD_YAML" ]; then
+        cp "$OLD_YAML" "$OUTPUT_YAML"
+    else
+        rm -f "$OUTPUT_YAML"
+    fi
+
+    if [ -f "$OLD_LIST" ]; then
+        cp "$OLD_LIST" "$OUTPUT_LIST"
+    else
+        rm -f "$OUTPUT_LIST"
+    fi
+
+    if [ -f "$OLD_MRS" ]; then
+        cp "$OLD_MRS" "$OUTPUT_MRS"
+    else
+        rm -f "$OUTPUT_MRS"
+    fi
+
+fi
+
+# ============================================================
+# 清理临时文件
+# ============================================================
+
+rm -f "$TMP_RAW" "$TMP_IDN" "$TMP_SORTED"
+
+echo
 echo "生成完成："
-echo "  域名数量：$(grep -cve '^[[:space:]]*$' "$OUTPUT_LIST")"
-echo "  SHA256：$(sha256sum "$SOURCE" | awk '{print $1}')"
+echo "  域名数量：$DOMAIN_COUNT"
+echo "  SHA256：$SOURCE_SHA256"
 echo "  YAML：$OUTPUT_YAML"
 echo "  TEXT：$OUTPUT_LIST"
 echo "  MRS：$OUTPUT_MRS"
