@@ -11,7 +11,9 @@ permissions:
   contents: write
 
 jobs:
+
   update-ai:
+
     runs-on: ubuntu-latest
 
     steps:
@@ -30,6 +32,7 @@ jobs:
       - name: Get latest Mihomo version
         id: mihomo
         run: |
+
           set -e
 
           API="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
@@ -45,6 +48,7 @@ jobs:
           fi
 
           echo "Mihomo 最新稳定版：$VERSION"
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       # ========================================
@@ -53,6 +57,7 @@ jobs:
 
       - name: Install latest stable Mihomo
         run: |
+
           set -e
 
           VERSION="${{ steps.mihomo.outputs.version }}"
@@ -61,7 +66,14 @@ jobs:
 
           URL="https://github.com/MetaCubeX/mihomo/releases/download/${VERSION}/${FILE}"
 
-          echo "下载：$URL"
+          echo "========================================"
+          echo "安装 Mihomo"
+          echo "========================================"
+          echo
+
+          echo "版本：$VERSION"
+          echo "文件：$FILE"
+          echo
 
           wget -q --show-progress "$URL"
 
@@ -73,6 +85,9 @@ jobs:
 
           sudo mv "$BINARY" /usr/local/bin/mihomo
 
+          echo
+          echo "安装完成："
+
           mihomo -v
 
       # ========================================
@@ -81,6 +96,7 @@ jobs:
 
       - name: Build AI rules
         run: |
+
           set -e
 
           chmod +x scripts/build-ai.sh
@@ -88,46 +104,89 @@ jobs:
           ./scripts/build-ai.sh
 
       # ========================================
-      # 5. 检查输出
+      # 5. 检查是否真的有变化
       # ========================================
 
-      - name: Validate AI rules
+      - name: Check generated files
+        id: generated
         run: |
+
           set -e
 
-          test -s output/AI.yaml
-          test -s output/AI.list
-          test -s output/AI.mrs
+          echo "========================================"
+          echo "检查 AI 规则变化"
+          echo "========================================"
 
-          echo "AI.yaml:"
-          head -20 output/AI.yaml
+          if git diff --quiet -- \
+              output/AI.list \
+              output/AI.yaml \
+              output/AI.mrs
+          then
 
-          echo
-          echo "规则数量："
+            echo "AI 规则没有变化"
 
-          grep -v '^#' output/AI.list | grep -v '^$' | wc -l
+            echo "commit=false" >> "$GITHUB_OUTPUT"
+
+          else
+
+            echo "AI 规则发生变化"
+
+            git diff --stat -- \
+              output/AI.list \
+              output/AI.yaml \
+              output/AI.mrs
+
+            echo "commit=true" >> "$GITHUB_OUTPUT"
+
+          fi
 
       # ========================================
       # 6. 提交
       # ========================================
 
       - name: Commit changes
+        if: steps.generated.outputs.commit == 'true'
         run: |
+
           set -e
 
+          echo "========================================"
+          echo "提交 AI 规则"
+          echo "========================================"
+
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add \
-            output/AI.yaml \
             output/AI.list \
+            output/AI.yaml \
             output/AI.mrs
 
           if git diff --cached --quiet; then
-            echo "AI 规则没有变化"
-            exit 0
+
+            echo "没有需要提交的内容"
+
+          else
+
+            git commit -m "update AI rules"
+
+            git push
+
           fi
 
-          git commit -m "update AI rules"
+      # ========================================
+      # 7. 没有变化
+      # ========================================
 
-          git push
+      - name: No changes
+        if: steps.generated.outputs.commit == 'false'
+        run: |
+
+          echo "========================================"
+          echo "AI 规则没有变化"
+          echo "========================================"
+
+          echo
+          echo "跳过提交"
