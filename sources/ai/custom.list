@@ -8,50 +8,35 @@ auth.openai.com
 oaistatic.com
 oaiusercontent.com
 
-# ===== Anthropic / Claude =====
+# ===== Claude =====
 anthropic.com
 claude.ai
 claude.com
 
-# ===== Google Gemini =====
+# ===== Gemini =====
 gemini.google.com
 ai.google.dev
 generativelanguage.googleapis.com
 
-# ===== xAI / Grok =====
+# ===== Grok =====
 grok.com
 x.ai
 
-# ===== Microsoft Copilot =====
+# ===== Copilot =====
 copilot.microsoft.com
-copilot.cloud.microsoft
-bing.com
 
 # ===== DeepSeek =====
 deepseek.com
-chat.deepseek.com
-api.deepseek.com
 
 # ===== Perplexity =====
 perplexity.ai
-www.perplexity.ai
 
 # ===== Cursor =====
 cursor.com
 cursor.sh
 
-# ===== Poe =====
-poe.com
-
-# ===== Hugging Face =====
-huggingface.co
-
 # ===== Mistral =====
 mistral.ai
-chat.mistral.ai
-
-# ===== Cohere =====
-cohere.com
 
 # ===== Groq =====
 groq.com
@@ -59,11 +44,5 @@ groq.com
 # ===== OpenRouter =====
 openrouter.ai
 
-# ===== Replicate =====
-replicate.com
-
-# ===== Together AI =====
-together.ai
-
-# ===== Fireworks AI =====
-fireworks.ai
+# ===== Hugging Face =====
+huggingface.co
