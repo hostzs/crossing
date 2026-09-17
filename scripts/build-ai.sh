@@ -2,106 +2,171 @@
 
 set -eu
 
-SOURCE="sources/ai.list"
-OUTPUT_DIR="output"
+# ========================================
+# AI Rules Builder
+# ========================================
 
-OUTPUT_YAML="$OUTPUT_DIR/AI.yaml"
+BASE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+
+SOURCE_DIR="$BASE_DIR/sources/ai"
+OUTPUT_DIR="$BASE_DIR/output"
+
+CUSTOM="$SOURCE_DIR/custom.list"
+
 OUTPUT_LIST="$OUTPUT_DIR/AI.list"
+OUTPUT_YAML="$OUTPUT_DIR/AI.yaml"
 OUTPUT_MRS="$OUTPUT_DIR/AI.mrs"
 
-echo "========================================"
-echo "Crossing AI Rule Builder"
-echo "========================================"
+TMP_DIR="$(mktemp -d)"
 
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+mkdir -p "$SOURCE_DIR"
 mkdir -p "$OUTPUT_DIR"
 
-# ============================================================
-# 检查源文件
-# ============================================================
+echo "========================================"
+echo "AI Rules Builder"
+echo "========================================"
+echo
 
-if [ ! -f "$SOURCE" ]; then
-    echo "错误：找不到 $SOURCE"
+# ========================================
+# 1. 第三方规则源
+# ========================================
+
+SOURCES="
+OpenAI|https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/OpenAI/OpenAI.list
+Claude|https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Claude/Claude.list
+Gemini|https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Gemini/Gemini.list
+Copilot|https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Copilot/Copilot.list
+"
+
+# ========================================
+# 2. 下载第三方规则
+# ========================================
+
+ALL_RULES="$TMP_DIR/all.rules"
+
+: > "$ALL_RULES"
+
+echo "下载 AI 第三方规则："
+echo
+
+printf '%s\n' "$SOURCES" |
+while IFS='|' read -r NAME URL
+do
+    [ -n "$NAME" ] || continue
+
+    FILE="$TMP_DIR/${NAME}.list"
+
+    echo "[$NAME]"
+    echo "$URL"
+
+    if curl -fsSL \
+        --retry 3 \
+        --retry-delay 2 \
+        --connect-timeout 15 \
+        --max-time 120 \
+        "$URL" \
+        -o "$FILE"
+    then
+        echo "下载成功"
+
+        # --------------------------------
+        # 只提取 DOMAIN / DOMAIN-SUFFIX
+        # --------------------------------
+
+        awk -F',' '
+            /^[[:space:]]*#/ { next }
+
+            /^[[:space:]]*DOMAIN,/ {
+                print $2
+                next
+            }
+
+            /^[[:space:]]*DOMAIN-SUFFIX,/ {
+                print $2
+                next
+            }
+        ' "$FILE" >> "$ALL_RULES"
+
+    else
+        echo "警告：$NAME 下载失败"
+        echo "继续使用其他来源"
+    fi
+
+    echo
+done
+
+# ========================================
+# 3. 加入本地核心规则
+# ========================================
+
+if [ -f "$CUSTOM" ]; then
+    echo "加入本地核心规则：$CUSTOM"
+
+    cat "$CUSTOM" >> "$ALL_RULES"
+else
+    echo "错误：找不到 $CUSTOM"
     exit 1
 fi
 
-# ============================================================
-# 清理旧数据
-# ============================================================
+# ========================================
+# 4. 标准化域名
+# ========================================
 
-TMP_RAW=$(mktemp)
-TMP_IDN=$(mktemp)
-TMP_SORTED=$(mktemp)
+NORMALIZED="$TMP_DIR/normalized.list"
 
-cleanup() {
-    rm -f "$TMP_RAW" "$TMP_IDN" "$TMP_SORTED"
+awk '
+{
+    gsub(/\r/, "")
+    gsub(/^[ \t]+|[ \t]+$/, "")
+
+    if ($0 == "") next
+    if ($0 ~ /^#/) next
+
+    # 去掉可能存在的 DOMAIN-SUFFIX / DOMAIN 前缀
+    sub(/^DOMAIN-SUFFIX,/, "")
+    sub(/^DOMAIN,/, "")
+
+    # 去掉尾部句点
+    sub(/\.$/, "")
+
+    print tolower($0)
 }
+' "$ALL_RULES" |
+grep -E '^[A-Za-z0-9][A-Za-z0-9._-]*$' |
+sort -u > "$NORMALIZED"
 
-trap cleanup EXIT
+# ========================================
+# 5. 基础检查
+# ========================================
 
-# ============================================================
-# 读取域名
-# ============================================================
-
-grep -v '^[[:space:]]*$' "$SOURCE" \
-    | grep -v '^[[:space:]]*#' \
-    | sed 's/[[:space:]]*#.*$//' \
-    | sed 's/^[[:space:]]*//' \
-    | sed 's/[[:space:]]*$//' \
-    | sed 's/^DOMAIN-SUFFIX,//' \
-    > "$TMP_RAW"
-
-RAW_COUNT=$(grep -c . "$TMP_RAW" || true)
-
-echo "原始域名：$RAW_COUNT"
-
-# ============================================================
-# IDN → Punycode
-# ============================================================
-
-python3 - "$TMP_RAW" "$TMP_IDN" <<'PY'
-import sys
-
-src = sys.argv[1]
-dst = sys.argv[2]
-
-with open(src, "r", encoding="utf-8") as f, \
-     open(dst, "w", encoding="utf-8") as out:
-
-    for line in f:
-        domain = line.strip().lower()
-
-        if not domain:
-            continue
-
-        try:
-            domain = domain.encode("idna").decode("ascii")
-        except Exception:
-            pass
-
-        domain = domain.rstrip(".")
-
-        if domain:
-            out.write(domain + "\n")
-PY
-
-# ============================================================
-# 去重 + 排序
-# ============================================================
-
-sort -u "$TMP_IDN" > "$TMP_SORTED"
-
-DOMAIN_COUNT=$(grep -c . "$TMP_SORTED" || true)
-
-echo "去重后域名：$DOMAIN_COUNT"
-
-# ============================================================
-# 核心域名检查
-# ============================================================
+COUNT="$(wc -l < "$NORMALIZED" | tr -d ' ')"
 
 echo
-echo "检查核心 AI 域名..."
+echo "========================================"
+echo "规则统计"
+echo "========================================"
+echo "AI 域名数量：$COUNT"
+echo
 
-REQUIRED_DOMAINS="
+# 防止第三方规则全部失效导致生成空规则
+MIN_COUNT=20
+
+if [ "$COUNT" -lt "$MIN_COUNT" ]; then
+    echo "错误：AI 规则数量异常"
+    echo "当前：$COUNT"
+    echo "最低要求：$MIN_COUNT"
+    exit 1
+fi
+
+# ========================================
+# 6. 核心域名检查
+# ========================================
+
+echo "检查核心 AI 域名："
+
+CORE_DOMAINS="
 openai.com
 chatgpt.com
 api.openai.com
@@ -113,107 +178,182 @@ deepseek.com
 perplexity.ai
 "
 
-for domain in $REQUIRED_DOMAINS; do
-    if grep -Fxq "$domain" "$TMP_SORTED"; then
-        echo "  ✓ $domain"
+MISSING=0
+
+printf '%s\n' "$CORE_DOMAINS" |
+while read -r DOMAIN
+do
+    [ -n "$DOMAIN" ] || continue
+
+    if grep -Fxq "$DOMAIN" "$NORMALIZED"; then
+        echo "  OK      $DOMAIN"
     else
-        echo "  ✗ $domain"
+        echo "  MISSING $DOMAIN"
+        MISSING=1
+    fi
+done
+
+# 上面的 while 在管道子 shell 中运行，
+# 因此这里重新直接检查一次，确保状态可靠。
+
+for DOMAIN in \
+    openai.com \
+    chatgpt.com \
+    api.openai.com \
+    claude.ai \
+    gemini.google.com \
+    grok.com \
+    copilot.microsoft.com \
+    deepseek.com \
+    perplexity.ai
+do
+    if ! grep -Fxq "$DOMAIN" "$NORMALIZED"; then
         echo
-        echo "错误：核心 AI 域名缺失"
+        echo "错误：核心域名缺失：$DOMAIN"
         exit 1
     fi
 done
 
-# ============================================================
-# 数量检查
-# ============================================================
+echo
+echo "核心域名检查通过"
 
-MIN_COUNT=20
+# ========================================
+# 7. 生成 AI.list
+# ========================================
 
-if [ "$DOMAIN_COUNT" -lt "$MIN_COUNT" ]; then
+NEW_LIST="$TMP_DIR/AI.list"
+
+{
+    echo "# ========================================"
+    echo "# AI Rules"
+    echo "# Generated by hostzs/crossing"
+    echo "# ========================================"
+    echo "#"
+    echo "# Sources:"
+    echo "# - BlackMatrix7 OpenAI"
+    echo "# - BlackMatrix7 Claude"
+    echo "# - BlackMatrix7 Gemini"
+    echo "# - BlackMatrix7 Copilot"
+    echo "# - crossing custom.list"
+    echo "#"
+    echo "# ========================================"
     echo
-    echo "错误：AI 规则数量异常"
-    echo "当前：$DOMAIN_COUNT"
-    echo "最低：$MIN_COUNT"
+
+    while read -r DOMAIN
+    do
+        echo "DOMAIN-SUFFIX,$DOMAIN"
+    done < "$NORMALIZED"
+
+} > "$NEW_LIST"
+
+# ========================================
+# 8. 生成 AI.yaml
+# ========================================
+
+NEW_YAML="$TMP_DIR/AI.yaml"
+
+{
+    echo "# ========================================"
+    echo "# AI Rules"
+    echo "# Generated by hostzs/crossing"
+    echo "# ========================================"
+    echo
+
+    echo "payload:"
+
+    while read -r DOMAIN
+    do
+        echo "  - DOMAIN-SUFFIX,$DOMAIN"
+    done < "$NORMALIZED"
+
+} > "$NEW_YAML"
+
+# ========================================
+# 9. 使用 Mihomo 生成 MRS
+# ========================================
+
+NEW_MRS="$TMP_DIR/AI.mrs"
+
+if ! command -v mihomo >/dev/null 2>&1; then
+    echo
+    echo "错误：系统中没有 mihomo"
     exit 1
 fi
 
-# ============================================================
-# SHA256
-# ============================================================
-
-SOURCE_SHA256=$(sha256sum "$SOURCE" | awk '{print $1}')
-
-UPDATED=$(TZ="Asia/Shanghai" date +"%Y-%m-%d %H:%M:%S CST")
-
-# ============================================================
-# 生成 AI.yaml
-# ============================================================
-
-{
-    echo "# NAME: AI"
-    echo "# AUTHOR: hostzs"
-    echo "# REPO: https://github.com/hostzs/crossing"
-    echo "# UPDATED: $UPDATED"
-    echo "# SOURCE-SHA256: $SOURCE_SHA256"
-    echo "# COUNT: $DOMAIN_COUNT"
-    echo "#"
-    echo "# Generated by Crossing AI Rule Builder"
-    echo
-
-    while IFS= read -r domain
-    do
-        echo "  - $domain"
-    done < "$TMP_SORTED"
-
-} > "$OUTPUT_YAML"
-
-# ============================================================
-# 生成 AI.list
-# ============================================================
-
-{
-    echo "# NAME: AI"
-    echo "# AUTHOR: hostzs"
-    echo "# REPO: https://github.com/hostzs/crossing"
-    echo "# UPDATED: $UPDATED"
-    echo "# SOURCE-SHA256: $SOURCE_SHA256"
-    echo "# COUNT: $DOMAIN_COUNT"
-    echo "#"
-
-    while IFS= read -r domain
-    do
-        echo "$domain"
-    done < "$TMP_SORTED"
-
-} > "$OUTPUT_LIST"
-
-# ============================================================
-# 生成 MRS
-# ============================================================
-
 echo
-echo "生成 AI.mrs..."
+echo "使用 Mihomo 生成 AI.mrs"
 
-mihomo convert-ruleset domain text \
-    "$OUTPUT_LIST" \
-    "$OUTPUT_MRS"
+mihomo convert-ruleset \
+    domain \
+    text \
+    "$NEW_LIST" \
+    "$NEW_MRS"
 
-# ============================================================
-# 最终检查
-# ============================================================
+# ========================================
+# 10. 检查 MRS
+# ========================================
 
-if [ ! -s "$OUTPUT_MRS" ]; then
+if [ ! -s "$NEW_MRS" ]; then
     echo "错误：AI.mrs 生成失败"
     exit 1
 fi
 
+MRS_SIZE="$(wc -c < "$NEW_MRS" | tr -d ' ')"
+
+echo "AI.mrs 大小：${MRS_SIZE} bytes"
+
+if [ "$MRS_SIZE" -lt 100 ]; then
+    echo "错误：AI.mrs 文件异常"
+    exit 1
+fi
+
+# ========================================
+# 11. 检查是否真正发生变化
+# ========================================
+
+CHANGED=false
+
+if [ ! -f "$OUTPUT_LIST" ] ||
+   ! cmp -s "$NEW_LIST" "$OUTPUT_LIST"; then
+    CHANGED=true
+fi
+
+if [ ! -f "$OUTPUT_YAML" ] ||
+   ! cmp -s "$NEW_YAML" "$OUTPUT_YAML"; then
+    CHANGED=true
+fi
+
+if [ ! -f "$OUTPUT_MRS" ] ||
+   ! cmp -s "$NEW_MRS" "$OUTPUT_MRS"; then
+    CHANGED=true
+fi
+
+# ========================================
+# 12. 写入结果
+# ========================================
+
+if [ "$CHANGED" = "true" ]; then
+
+    cp "$NEW_LIST" "$OUTPUT_LIST"
+    cp "$NEW_YAML" "$OUTPUT_YAML"
+    cp "$NEW_MRS" "$OUTPUT_MRS"
+
+    echo
+    echo "========================================"
+    echo "AI 规则已更新"
+    echo "========================================"
+
+else
+
+    echo
+    echo "========================================"
+    echo "AI 规则没有变化"
+    echo "========================================"
+
+fi
+
 echo
-echo "========================================"
-echo "AI 规则生成完成"
-echo "========================================"
-echo
-echo "域名数量：$DOMAIN_COUNT"
-echo "YAML：$OUTPUT_YAML"
-echo "LIST：$OUTPUT_LIST"
-echo "MRS：$OUTPUT_MRS"
+echo "AI 域名数量：$COUNT"
+echo "AI.list：$OUTPUT_LIST"
+echo "AI.yaml：$OUTPUT_YAML"
+echo "AI.mrs：$OUTPUT_MRS"
