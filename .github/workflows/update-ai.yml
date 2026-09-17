@@ -1,1 +1,133 @@
+name: Update AI Rules
 
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: "30 0 * * *"
+      timezone: "Asia/Shanghai"
+
+permissions:
+  contents: write
+
+jobs:
+  update-ai:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ========================================
+      # 1. Checkout
+      # ========================================
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ========================================
+      # 2. 获取 Mihomo 最新稳定版本
+      # ========================================
+
+      - name: Get latest Mihomo version
+        id: mihomo
+        run: |
+          set -e
+
+          API="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
+
+          VERSION=$(curl -fsSL "$API" \
+            | grep '"tag_name":' \
+            | head -1 \
+            | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+
+          if [ -z "$VERSION" ]; then
+            echo "无法获取 Mihomo 最新版本"
+            exit 1
+          fi
+
+          echo "Mihomo 最新稳定版：$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # ========================================
+      # 3. 安装 Mihomo
+      # ========================================
+
+      - name: Install latest stable Mihomo
+        run: |
+          set -e
+
+          VERSION="${{ steps.mihomo.outputs.version }}"
+
+          FILE="mihomo-linux-amd64-v1-${VERSION}.gz"
+
+          URL="https://github.com/MetaCubeX/mihomo/releases/download/${VERSION}/${FILE}"
+
+          echo "下载：$URL"
+
+          wget -q --show-progress "$URL"
+
+          gunzip "$FILE"
+
+          BINARY="${FILE%.gz}"
+
+          chmod +x "$BINARY"
+
+          sudo mv "$BINARY" /usr/local/bin/mihomo
+
+          mihomo -v
+
+      # ========================================
+      # 4. 构建 AI 规则
+      # ========================================
+
+      - name: Build AI rules
+        run: |
+          set -e
+
+          chmod +x scripts/build-ai.sh
+
+          ./scripts/build-ai.sh
+
+      # ========================================
+      # 5. 检查输出
+      # ========================================
+
+      - name: Validate AI rules
+        run: |
+          set -e
+
+          test -s output/AI.yaml
+          test -s output/AI.list
+          test -s output/AI.mrs
+
+          echo "AI.yaml:"
+          head -20 output/AI.yaml
+
+          echo
+          echo "规则数量："
+
+          grep -v '^#' output/AI.list | grep -v '^$' | wc -l
+
+      # ========================================
+      # 6. 提交
+      # ========================================
+
+      - name: Commit changes
+        run: |
+          set -e
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            output/AI.yaml \
+            output/AI.list \
+            output/AI.mrs
+
+          if git diff --cached --quiet; then
+            echo "AI 规则没有变化"
+            exit 0
+          fi
+
+          git commit -m "update AI rules"
+
+          git push
