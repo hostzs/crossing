@@ -1,24 +1,31 @@
 #!/bin/sh
-
 set -eu
 
 OUTPUT_DIR="output"
 
 PROXY_SOURCE="sources/manual-proxy.list"
-DIRECT_SOURCE="sources/manual-direct.list"
+DIRECT_LOCAL_SOURCE="sources/manual-direct.list"
 
 DIRECT_REMOTE_URL="https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt"
+
+PROXY_YAML="$OUTPUT_DIR/proxy.yaml"
+PROXY_LIST="$OUTPUT_DIR/proxy.list"
+PROXY_MRS="$OUTPUT_DIR/proxy.mrs"
+
+DIRECT_YAML="$OUTPUT_DIR/direct.yaml"
+DIRECT_LIST="$OUTPUT_DIR/direct.list"
+DIRECT_MRS="$OUTPUT_DIR/direct.mrs"
 
 echo "========================================"
 echo "Crossing Rule Builder"
 echo "========================================"
 echo
+echo "Proxy source：$PROXY_SOURCE"
+echo "Direct local：$DIRECT_LOCAL_SOURCE"
+echo "Direct remote：$DIRECT_REMOTE_URL"
+echo
 
 mkdir -p "$OUTPUT_DIR"
-
-# ============================================================
-# 临时文件清理
-# ============================================================
 
 TMP_FILES=""
 
@@ -30,160 +37,282 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-new_tmp() {
-    TMP=$(mktemp)
-    TMP_FILES="$TMP_FILES $TMP"
-    echo "$TMP"
-}
+TMP_PROXY_RAW=$(mktemp)
+TMP_PROXY_IDN=$(mktemp)
+TMP_PROXY_SORTED=$(mktemp)
 
-# ============================================================
-# 构建规则
-#
-# 参数：
-#
-# $1 = NAME
-# $2 = 本地 SOURCE
-# $3 = OUTPUT 前缀
-# $4 = 远程规则 URL，可为空
-# ============================================================
+TMP_DIRECT_LOCAL=$(mktemp)
+TMP_DIRECT_REMOTE=$(mktemp)
+TMP_DIRECT_ALL=$(mktemp)
+TMP_DIRECT_IDN=$(mktemp)
+TMP_DIRECT_SORTED=$(mktemp)
 
-build_rule() {
+OLD_PROXY_YAML=$(mktemp)
+OLD_PROXY_LIST=$(mktemp)
+OLD_PROXY_MRS=$(mktemp)
 
-    NAME="$1"
-    SOURCE="$2"
-    OUTPUT="$3"
-    REMOTE_URL="${4:-}"
+OLD_DIRECT_YAML=$(mktemp)
+OLD_DIRECT_LIST=$(mktemp)
+OLD_DIRECT_MRS=$(mktemp)
 
-    OUTPUT_YAML="$OUTPUT.yaml"
-    OUTPUT_LIST="$OUTPUT.list"
-    OUTPUT_MRS="$OUTPUT.mrs"
+TMP_FILES="$TMP_PROXY_RAW \
+$TMP_PROXY_IDN \
+$TMP_PROXY_SORTED \
+$TMP_DIRECT_LOCAL \
+$TMP_DIRECT_REMOTE \
+$TMP_DIRECT_ALL \
+$TMP_DIRECT_IDN \
+$TMP_DIRECT_SORTED \
+$OLD_PROXY_YAML \
+$OLD_PROXY_LIST \
+$OLD_PROXY_MRS \
+$OLD_DIRECT_YAML \
+$OLD_DIRECT_LIST \
+$OLD_DIRECT_MRS"
 
-    echo "========================================"
-    echo "开始构建：$NAME"
-    echo "========================================"
-    echo
-    echo "原始数据：$SOURCE"
-    echo "输出 YAML：$OUTPUT_YAML"
-    echo "输出 TEXT：$OUTPUT_LIST"
-    echo "输出 MRS：$OUTPUT_MRS"
+if [ -f "$PROXY_YAML" ]; then
+    cp "$PROXY_YAML" "$OLD_PROXY_YAML"
+fi
 
-    if [ -n "$REMOTE_URL" ]; then
-        echo "远程规则：$REMOTE_URL"
-    fi
+if [ -f "$PROXY_LIST" ]; then
+    cp "$PROXY_LIST" "$OLD_PROXY_LIST"
+fi
 
-    echo
+if [ -f "$PROXY_MRS" ]; then
+    cp "$PROXY_MRS" "$OLD_PROXY_MRS"
+fi
 
-    # ========================================================
-    # 保存旧输出
-    # ========================================================
+if [ -f "$DIRECT_YAML" ]; then
+    cp "$DIRECT_YAML" "$OLD_DIRECT_YAML"
+fi
 
-    OLD_YAML=$(new_tmp)
-    OLD_LIST=$(new_tmp)
-    OLD_MRS=$(new_tmp)
+if [ -f "$DIRECT_LIST" ]; then
+    cp "$DIRECT_LIST" "$OLD_DIRECT_LIST"
+fi
 
-    [ -f "$OUTPUT_YAML" ] && cp "$OUTPUT_YAML" "$OLD_YAML"
-    [ -f "$OUTPUT_LIST" ] && cp "$OUTPUT_LIST" "$OLD_LIST"
-    [ -f "$OUTPUT_MRS" ] && cp "$OUTPUT_MRS" "$OLD_MRS"
+if [ -f "$DIRECT_MRS" ]; then
+    cp "$DIRECT_MRS" "$OLD_DIRECT_MRS"
+fi
 
-    # ========================================================
-    # 临时文件
-    # ========================================================
 
-    TMP_RAW=$(new_tmp)
-    TMP_IDN=$(new_tmp)
-    TMP_SORTED=$(new_tmp)
-    TMP_REMOTE=$(new_tmp)
+########################################
+# Proxy
+########################################
 
-    # ========================================================
-    # 读取本地规则
-    # ========================================================
+echo "========================================"
+echo "处理 Proxy Rules"
+echo "========================================"
+echo
 
-    if [ ! -f "$SOURCE" ]; then
-        echo "错误：找不到规则文件：$SOURCE"
-        exit 1
-    fi
+grep -v '^[[:space:]]*$' "$PROXY_SOURCE" \
+    | grep -v '^[[:space:]]*#' \
+    | sed 's/[[:space:]]*#.*$//' \
+    | sed 's/^[[:space:]]*//' \
+    | sed 's/[[:space:]]*$//' \
+    > "$TMP_PROXY_RAW"
 
-    grep -v '^[[:space:]]*$' "$SOURCE" \
+sed -i \
+    -e 's/^DOMAIN-SUFFIX,//' \
+    -e 's/^DOMAIN,//' \
+    "$TMP_PROXY_RAW"
+
+python3 - "$TMP_PROXY_RAW" "$TMP_PROXY_IDN" <<'PY'
+import sys
+
+src = sys.argv[1]
+dst = sys.argv[2]
+
+count = 0
+
+with open(src, "r", encoding="utf-8") as f, \
+     open(dst, "w", encoding="utf-8") as out:
+
+    for line in f:
+        domain = line.strip().lower()
+
+        if not domain:
+            continue
+
+        try:
+            domain = domain.encode("idna").decode("ascii")
+        except Exception:
+            pass
+
+        domain = domain.rstrip(".")
+
+        if domain:
+            out.write(domain + "\n")
+            count += 1
+
+print(f"Proxy IDN 转换后：{count}")
+PY
+
+sort -u "$TMP_PROXY_IDN" > "$TMP_PROXY_SORTED"
+
+PROXY_COUNT=$(grep -c . "$TMP_PROXY_SORTED" || true)
+
+PROXY_SOURCE_SHA256=$(sha256sum "$PROXY_SOURCE" | awk '{print $1}')
+
+echo "Proxy 去重后：$PROXY_COUNT"
+echo "Proxy SHA256：$PROXY_SOURCE_SHA256"
+echo
+
+
+########################################
+# Direct - local
+########################################
+
+echo "========================================"
+echo "处理 Direct 本地规则"
+echo "========================================"
+echo
+
+if [ -f "$DIRECT_LOCAL_SOURCE" ]; then
+
+    grep -v '^[[:space:]]*$' "$DIRECT_LOCAL_SOURCE" \
         | grep -v '^[[:space:]]*#' \
         | sed 's/[[:space:]]*#.*$//' \
         | sed 's/^[[:space:]]*//' \
         | sed 's/[[:space:]]*$//' \
-        > "$TMP_RAW"
+        > "$TMP_DIRECT_LOCAL"
 
-    # ========================================================
-    # 兼容：
+else
+
+    : > "$TMP_DIRECT_LOCAL"
+
+fi
+
+sed -i \
+    -e 's/^DOMAIN-SUFFIX,//' \
+    -e 's/^DOMAIN,//' \
+    "$TMP_DIRECT_LOCAL"
+
+LOCAL_DIRECT_COUNT=$(grep -c . "$TMP_DIRECT_LOCAL" || true)
+
+echo "本地 Direct：$LOCAL_DIRECT_COUNT"
+echo
+
+
+########################################
+# Direct - remote
+########################################
+
+echo "========================================"
+echo "下载 Loyalsoldier Direct"
+echo "========================================"
+echo
+
+curl -fsSL \
+    "$DIRECT_REMOTE_URL" \
+    -o "$TMP_DIRECT_REMOTE"
+
+REMOTE_DIRECT_SHA256=$(sha256sum "$TMP_DIRECT_REMOTE" | awk '{print $1}')
+
+echo "Remote SHA256：$REMOTE_DIRECT_SHA256"
+echo
+
+
+########################################
+# Direct - parse remote YAML
+########################################
+
+echo "========================================"
+echo "解析 Loyalsoldier Direct"
+echo "========================================"
+echo
+
+python3 - "$TMP_DIRECT_REMOTE" "$TMP_DIRECT_ALL" "$TMP_DIRECT_LOCAL" <<'PY'
+import sys
+import re
+
+remote = sys.argv[1]
+output = sys.argv[2]
+local = sys.argv[3]
+
+count_remote = 0
+count_local = 0
+
+domain_re = re.compile(
+    r"^[A-Za-z0-9*_-]+(?:\.[A-Za-z0-9*_-]+)+$"
+)
+
+def write_domain(out, value):
+    global count_remote
+
+    value = value.strip()
+
+    if not value:
+        return
+
+    # 去掉 YAML 引号
+    if (
+        len(value) >= 2
+        and value[0] in ("'", '"')
+        and value[-1] == value[0]
+    ):
+        value = value[1:-1]
+
+    value = value.strip().lower().rstrip(".")
+
+    if not value:
+        return
+
+    # 当前 Loyalsoldier direct.txt 是：
     #
-    # DOMAIN-SUFFIX,example.com
-    # DOMAIN,example.com
+    # payload:
+    #   - 'example.com'
     #
-    # 最终统一为：
-    #
-    # example.com
-    # ========================================================
+    # 这里只提取真正的域名。
+    if domain_re.match(value):
+        out.write(value + "\n")
+        count_remote += 1
 
-    sed -i \
-        -e 's/^DOMAIN-SUFFIX,//' \
-        -e 's/^DOMAIN,//' \
-        "$TMP_RAW"
 
-    LOCAL_COUNT=$(grep -c . "$TMP_RAW" || true)
+with open(output, "w", encoding="utf-8") as out:
 
-    echo "本地规则：$LOCAL_COUNT"
+    # 先写远程规则
+    with open(remote, "r", encoding="utf-8") as f:
 
-    # ========================================================
-    # 下载远程规则
-    # ========================================================
+        for line in f:
 
-    REMOTE_SHA256=""
+            line = line.strip()
 
-    if [ -n "$REMOTE_URL" ]; then
+            if not line.startswith("-"):
+                continue
 
-        echo
-        echo "下载远程规则..."
+            value = line[1:].strip()
 
-        curl -fsSL \
-            --retry 3 \
-            --connect-timeout 15 \
-            --max-time 120 \
-            "$REMOTE_URL" \
-            -o "$TMP_REMOTE"
+            write_domain(out, value)
 
-        REMOTE_SHA256=$(sha256sum "$TMP_REMOTE" | awk '{print $1}')
+    # 再写本地规则
+    with open(local, "r", encoding="utf-8") as f:
 
-        echo "远程规则 SHA256：$REMOTE_SHA256"
+        for line in f:
 
-        # ----------------------------------------------------
-        # Loyalsoldier direct.txt
-        #
-        # 目前需要的是 domain 类型规则。
-        #
-        # 支持：
-        #
-        # DOMAIN-SUFFIX,example.com
-        # DOMAIN,example.com
-        #
-        # DOMAIN-KEYWORD / IP-CIDR 等非 domain 规则不加入
-        # ----------------------------------------------------
+            value = line.strip()
 
-        grep -E '^(DOMAIN-SUFFIX|DOMAIN),' "$TMP_REMOTE" \
-            | sed \
-                -e 's/^DOMAIN-SUFFIX,//' \
-                -e 's/^DOMAIN,//' \
-            >> "$TMP_RAW" || true
+            if not value:
+                continue
 
-        REMOTE_COUNT=$(grep -E '^(DOMAIN-SUFFIX|DOMAIN),' "$TMP_REMOTE" | wc -l | tr -d ' ' || true)
+            value = value.strip()
 
-        echo "远程 domain 规则：$REMOTE_COUNT"
-    fi
+            if value.startswith("DOMAIN-SUFFIX,"):
+                value = value[len("DOMAIN-SUFFIX,"):]
 
-    # ========================================================
-    # IDN 转 Punycode
-    # ========================================================
+            elif value.startswith("DOMAIN,"):
+                value = value[len("DOMAIN,"):]
 
-    echo
-    echo "开始 IDN 转 Punycode..."
+            value = value.strip().lower().rstrip(".")
 
-    python3 - "$TMP_RAW" "$TMP_IDN" <<'PY'
+            if value:
+                out.write(value + "\n")
+                count_local += 1
+
+print(f"Remote Direct：{count_remote}")
+print(f"Local Direct：{count_local}")
+PY
+
+python3 - "$TMP_DIRECT_ALL" "$TMP_DIRECT_IDN" <<'PY'
 import sys
 
 src = sys.argv[1]
@@ -201,262 +330,283 @@ with open(src, "r", encoding="utf-8") as f, \
         if not domain:
             continue
 
-        # 去掉可能存在的前导点
-        domain = domain.lstrip(".")
-
-        # IDN → Punycode
         try:
             domain = domain.encode("idna").decode("ascii")
         except Exception:
             pass
 
-        # 去掉末尾 .
         domain = domain.rstrip(".")
 
         if domain:
             out.write(domain + "\n")
             count += 1
 
-print(f"IDN 转换后：{count}")
+print(f"Direct IDN 转换后：{count}")
 PY
 
-    # ========================================================
-    # 去重 + 排序
-    # ========================================================
+sort -u "$TMP_DIRECT_IDN" > "$TMP_DIRECT_SORTED"
 
-    sort -u "$TMP_IDN" > "$TMP_SORTED"
+DIRECT_COUNT=$(grep -c . "$TMP_DIRECT_SORTED" || true)
 
-    DOMAIN_COUNT=$(grep -c . "$TMP_SORTED" || true)
+echo
+echo "Direct 最终去重后：$DIRECT_COUNT"
+echo
 
-    echo "去重后：$DOMAIN_COUNT"
+
+########################################
+# Combined hashes
+########################################
+
+DIRECT_LOCAL_SHA256=$(sha256sum "$DIRECT_LOCAL_SOURCE" 2>/dev/null \
+    | awk '{print $1}' || true)
+
+if [ -z "$DIRECT_LOCAL_SHA256" ]; then
+    DIRECT_LOCAL_SHA256="EMPTY"
+fi
+
+DIRECT_COMBINED_SHA256=$(
+    printf '%s\n' \
+        "$DIRECT_LOCAL_SHA256" \
+        "$REMOTE_DIRECT_SHA256" \
+        | sha256sum \
+        | awk '{print $1}'
+)
+
+UPDATED=$(TZ="Asia/Shanghai" date +"%Y-%m-%d %H:%M:%S CST")
+
+
+########################################
+# Generate Proxy YAML
+########################################
+
+{
+    echo "# NAME: proxy"
+    echo "# AUTHOR: edward"
+    echo "# REPO: https://github.com/hostzs/crossing"
+    echo "# UPDATED: $UPDATED"
+    echo "# SOURCE-SHA256: $PROXY_SOURCE_SHA256"
+    echo "# COUNT: $PROXY_COUNT"
+    echo "#"
+    echo "# Generated by Crossing Rule Builder"
     echo
 
-    # ========================================================
-    # SOURCE SHA256
-    #
-    # Proxy：
-    #   只计算 manual-proxy.list
-    #
-    # Direct：
-    #   同时计算：
-    #   manual-direct.list
-    #   Loyalsoldier direct.txt
-    #
-    # 这样远程规则变化可以被检测到。
-    # ========================================================
+    while IFS= read -r domain
+    do
+        echo "  - $domain"
+    done < "$TMP_PROXY_SORTED"
 
-    LOCAL_SHA256=$(sha256sum "$SOURCE" | awk '{print $1}')
+} > "$PROXY_YAML"
 
-    if [ -n "$REMOTE_URL" ]; then
 
-        SOURCE_SHA256=$(
-            {
-                printf '%s  %s\n' "$LOCAL_SHA256" "$SOURCE"
-                printf '%s  %s\n' "$REMOTE_SHA256" "$REMOTE_URL"
-            } | sha256sum | awk '{print $1}'
-        )
+########################################
+# Generate Proxy LIST
+########################################
 
-    else
+{
+    echo "# NAME: proxy"
+    echo "# AUTHOR: edward"
+    echo "# REPO: https://github.com/hostzs/crossing"
+    echo "# UPDATED: $UPDATED"
+    echo "# SOURCE-SHA256: $PROXY_SOURCE_SHA256"
+    echo "# COUNT: $PROXY_COUNT"
+    echo "#"
 
-        SOURCE_SHA256="$LOCAL_SHA256"
+    while IFS= read -r domain
+    do
+        echo "$domain"
+    done < "$TMP_PROXY_SORTED"
 
-    fi
+} > "$PROXY_LIST"
 
-    # ========================================================
-    # 更新时间
-    # ========================================================
 
-    UPDATED=$(TZ="Asia/Shanghai" date +"%Y-%m-%d %H:%M:%S CST")
+########################################
+# Generate Proxy MRS
+########################################
 
-    # ========================================================
-    # 生成 YAML
-    # ========================================================
+echo "生成 Proxy MRS..."
 
-    {
-        echo "# NAME: $NAME"
-        echo "# AUTHOR: edward"
-        echo "# REPO: https://github.com/hostzs/crossing"
-        echo "# UPDATED: $UPDATED"
-        echo "# SOURCE-SHA256: $SOURCE_SHA256"
-        echo "# COUNT: $DOMAIN_COUNT"
+mihomo convert-ruleset domain text \
+    "$PROXY_LIST" \
+    "$PROXY_MRS"
 
-        if [ -n "$REMOTE_URL" ]; then
-            echo "# REMOTE-SOURCE: $REMOTE_URL"
-            echo "# REMOTE-SHA256: $REMOTE_SHA256"
-        fi
 
-        echo "#"
-        echo "# Generated by Crossing Rule Builder"
-        echo
+########################################
+# Generate Direct YAML
+########################################
 
-        while IFS= read -r domain
-        do
-            echo "  - $domain"
-        done < "$TMP_SORTED"
+{
+    echo "# NAME: direct"
+    echo "# AUTHOR: edward"
+    echo "# REPO: https://github.com/hostzs/crossing"
+    echo "# UPDATED: $UPDATED"
+    echo "# SOURCE-SHA256: $DIRECT_COMBINED_SHA256"
+    echo "# COUNT: $DIRECT_COUNT"
+    echo "# REMOTE-SOURCE: $DIRECT_REMOTE_URL"
+    echo "# REMOTE-SHA256: $REMOTE_DIRECT_SHA256"
+    echo "#"
+    echo "# Generated by Crossing Rule Builder"
+    echo
 
-    } > "$OUTPUT_YAML"
+    while IFS= read -r domain
+    do
+        echo "  - $domain"
+    done < "$TMP_DIRECT_SORTED"
 
-    # ========================================================
-    # 生成 LIST
-    # ========================================================
+} > "$DIRECT_YAML"
 
-    {
-        echo "# NAME: $NAME"
-        echo "# AUTHOR: edward"
-        echo "# REPO: https://github.com/hostzs/crossing"
-        echo "# UPDATED: $UPDATED"
-        echo "# SOURCE-SHA256: $SOURCE_SHA256"
-        echo "# COUNT: $DOMAIN_COUNT"
 
-        if [ -n "$REMOTE_URL" ]; then
-            echo "# REMOTE-SOURCE: $REMOTE_URL"
-            echo "# REMOTE-SHA256: $REMOTE_SHA256"
-        fi
+########################################
+# Generate Direct LIST
+########################################
 
-        echo "#"
+{
+    echo "# NAME: direct"
+    echo "# AUTHOR: edward"
+    echo "# REPO: https://github.com/hostzs/crossing"
+    echo "# UPDATED: $UPDATED"
+    echo "# SOURCE-SHA256: $DIRECT_COMBINED_SHA256"
+    echo "# COUNT: $DIRECT_COUNT"
+    echo "# REMOTE-SOURCE: $DIRECT_REMOTE_URL"
+    echo "# REMOTE-SHA256: $REMOTE_DIRECT_SHA256"
+    echo "#"
 
-        while IFS= read -r domain
-        do
-            echo "$domain"
-        done < "$TMP_SORTED"
+    while IFS= read -r domain
+    do
+        echo "$domain"
+    done < "$TMP_DIRECT_SORTED"
 
-    } > "$OUTPUT_LIST"
+} > "$DIRECT_LIST"
+
+
+########################################
+# Generate Direct MRS
+########################################
+
+echo
+echo "生成 Direct MRS..."
+
+mihomo convert-ruleset domain text \
+    "$DIRECT_LIST" \
+    "$DIRECT_MRS"
+
+
+########################################
+# Compare generated files
+########################################
+
+PROXY_YAML_CHANGED=0
+PROXY_LIST_CHANGED=0
+PROXY_MRS_CHANGED=0
+
+DIRECT_YAML_CHANGED=0
+DIRECT_LIST_CHANGED=0
+DIRECT_MRS_CHANGED=0
+
+
+if [ ! -f "$OLD_PROXY_YAML" ] || \
+   ! cmp -s "$PROXY_YAML" "$OLD_PROXY_YAML"; then
+    PROXY_YAML_CHANGED=1
+fi
+
+if [ ! -f "$OLD_PROXY_LIST" ] || \
+   ! cmp -s "$PROXY_LIST" "$OLD_PROXY_LIST"; then
+    PROXY_LIST_CHANGED=1
+fi
+
+if [ ! -f "$OLD_PROXY_MRS" ] || \
+   ! cmp -s "$PROXY_MRS" "$OLD_PROXY_MRS"; then
+    PROXY_MRS_CHANGED=1
+fi
+
+
+if [ ! -f "$OLD_DIRECT_YAML" ] || \
+   ! cmp -s "$DIRECT_YAML" "$OLD_DIRECT_YAML"; then
+    DIRECT_YAML_CHANGED=1
+fi
+
+if [ ! -f "$OLD_DIRECT_LIST" ] || \
+   ! cmp -s "$DIRECT_LIST" "$OLD_DIRECT_LIST"; then
+    DIRECT_LIST_CHANGED=1
+fi
+
+if [ ! -f "$OLD_DIRECT_MRS" ] || \
+   ! cmp -s "$DIRECT_MRS" "$OLD_DIRECT_MRS"; then
+    DIRECT_MRS_CHANGED=1
+fi
+
+
+########################################
+# Restore old files if nothing changed
+########################################
+
+if [ "$PROXY_YAML_CHANGED" -eq 0 ] && \
+   [ "$PROXY_LIST_CHANGED" -eq 0 ] && \
+   [ "$PROXY_MRS_CHANGED" -eq 0 ] && \
+   [ "$DIRECT_YAML_CHANGED" -eq 0 ] && \
+   [ "$DIRECT_LIST_CHANGED" -eq 0 ] && \
+   [ "$DIRECT_MRS_CHANGED" -eq 0 ]; then
 
     echo
-    echo "YAML 和 TEXT 生成完成"
-
-    # ========================================================
-    # 生成 MRS
-    # ========================================================
-
+    echo "========================================"
+    echo "输出内容没有变化"
+    echo "========================================"
     echo
-    echo "开始生成 MRS..."
-
-    mihomo convert-ruleset domain text \
-        "$OUTPUT_LIST" \
-        "$OUTPUT_MRS"
-
+    echo "仅 UPDATED 时间发生变化"
+    echo "恢复旧文件，避免无意义提交"
     echo
-    echo "MRS 生成完成"
 
-    # ========================================================
-    # 判断实际输出是否变化
-    # ========================================================
-
-    YAML_CHANGED=0
-    LIST_CHANGED=0
-    MRS_CHANGED=0
-
-    if [ ! -s "$OLD_YAML" ] || ! cmp -s "$OUTPUT_YAML" "$OLD_YAML"; then
-        YAML_CHANGED=1
+    if [ -f "$OLD_PROXY_YAML" ]; then
+        cp "$OLD_PROXY_YAML" "$PROXY_YAML"
     fi
 
-    if [ ! -s "$OLD_LIST" ] || ! cmp -s "$OUTPUT_LIST" "$OLD_LIST"; then
-        LIST_CHANGED=1
+    if [ -f "$OLD_PROXY_LIST" ]; then
+        cp "$OLD_PROXY_LIST" "$PROXY_LIST"
     fi
 
-    if [ ! -s "$OLD_MRS" ] || ! cmp -s "$OUTPUT_MRS" "$OLD_MRS"; then
-        MRS_CHANGED=1
+    if [ -f "$OLD_PROXY_MRS" ]; then
+        cp "$OLD_PROXY_MRS" "$PROXY_MRS"
     fi
 
-    # ========================================================
-    # 如果实际规则没有变化
-    #
-    # 恢复旧文件，避免 UPDATED 导致无意义修改
-    # ========================================================
-
-    if [ "$YAML_CHANGED" -eq 1 ] || \
-       [ "$LIST_CHANGED" -eq 1 ] || \
-       [ "$MRS_CHANGED" -eq 1 ]; then
-
-        echo "检测到 $NAME 输出内容变化："
-
-        if [ "$YAML_CHANGED" -eq 1 ]; then
-            echo "  $OUTPUT_YAML：变化"
-        else
-            echo "  $OUTPUT_YAML：无变化"
-        fi
-
-        if [ "$LIST_CHANGED" -eq 1 ]; then
-            echo "  $OUTPUT_LIST：变化"
-        else
-            echo "  $OUTPUT_LIST：无变化"
-        fi
-
-        if [ "$MRS_CHANGED" -eq 1 ]; then
-            echo "  $OUTPUT_MRS：变化"
-        else
-            echo "  $OUTPUT_MRS：无变化"
-        fi
-
-    else
-
-        echo "输出内容没有变化"
-        echo "恢复旧文件，避免因为 UPDATED 时间产生无意义提交"
-
-        if [ -s "$OLD_YAML" ]; then
-            cp "$OLD_YAML" "$OUTPUT_YAML"
-        else
-            rm -f "$OUTPUT_YAML"
-        fi
-
-        if [ -s "$OLD_LIST" ]; then
-            cp "$OLD_LIST" "$OUTPUT_LIST"
-        else
-            rm -f "$OUTPUT_LIST"
-        fi
-
-        if [ -s "$OLD_MRS" ]; then
-            cp "$OLD_MRS" "$OUTPUT_MRS"
-        else
-            rm -f "$OUTPUT_MRS"
-        fi
-
+    if [ -f "$OLD_DIRECT_YAML" ]; then
+        cp "$OLD_DIRECT_YAML" "$DIRECT_YAML"
     fi
 
-    echo
-    echo "$NAME 构建完成"
-    echo "  域名数量：$DOMAIN_COUNT"
-    echo "  SOURCE SHA256：$SOURCE_SHA256"
-
-    if [ -n "$REMOTE_URL" ]; then
-        echo "  REMOTE SHA256：$REMOTE_SHA256"
+    if [ -f "$OLD_DIRECT_LIST" ]; then
+        cp "$OLD_DIRECT_LIST" "$DIRECT_LIST"
     fi
 
-    echo
-}
+    if [ -f "$OLD_DIRECT_MRS" ]; then
+        cp "$OLD_DIRECT_MRS" "$DIRECT_MRS"
+    fi
+
+fi
 
 
-# ============================================================
-# 构建 Proxy
-# ============================================================
+########################################
+# Summary
+########################################
 
-build_rule \
-    "proxy" \
-    "$PROXY_SOURCE" \
-    "$OUTPUT_DIR/proxy"
-
-
-# ============================================================
-# 构建 Direct
-#
-# 本地：
-#   sources/manual-direct.list
-#
-# +
-#
-# 远程：
-#   Loyalsoldier direct.txt
-# ============================================================
-
-build_rule \
-    "direct" \
-    "$DIRECT_SOURCE" \
-    "$OUTPUT_DIR/direct" \
-    "$DIRECT_REMOTE_URL"
-
-
+echo
 echo "========================================"
-echo "全部规则构建完成"
+echo "生成完成"
 echo "========================================"
+echo
+echo "Proxy："
+echo "  域名数量：$PROXY_COUNT"
+echo "  SHA256：$PROXY_SOURCE_SHA256"
+echo
+echo "Direct："
+echo "  本地规则：$LOCAL_DIRECT_COUNT"
+echo "  远程规则：见上方解析结果"
+echo "  最终去重：$DIRECT_COUNT"
+echo "  Combined SHA256：$DIRECT_COMBINED_SHA256"
+echo "  Remote SHA256：$REMOTE_DIRECT_SHA256"
+echo
+echo "输出："
+echo "  $PROXY_YAML"
+echo "  $PROXY_LIST"
+echo "  $PROXY_MRS"
+echo "  $DIRECT_YAML"
+echo "  $DIRECT_LIST"
+echo "  $DIRECT_MRS"
 echo
