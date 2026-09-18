@@ -1,24 +1,26 @@
 name: Update Proxy and Direct Rules
 
 on:
-
   workflow_dispatch:
 
   schedule:
     - cron: "0 0 * * *"
       timezone: "Asia/Shanghai"
 
+  push:
+    paths:
+      - "sources/manual-proxy.list"
+      - "sources/manual-direct.list"
+      - "scripts/build.sh"
+      - ".github/workflows/update.yml"
 
 permissions:
   contents: write
 
-
 jobs:
-
   update:
 
     runs-on: ubuntu-latest
-
 
     steps:
 
@@ -31,13 +33,12 @@ jobs:
 
 
       ########################################
-      # Get latest Mihomo
+      # Get latest Mihomo version
       ########################################
 
       - name: Get latest Mihomo version
         id: mihomo
         run: |
-
           set -e
 
           API="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
@@ -52,46 +53,50 @@ jobs:
             exit 1
           fi
 
-          echo "Mihomo 最新稳定版：$VERSION"
+          echo "========================================"
+          echo "Mihomo 最新稳定版"
+          echo "========================================"
+          echo
+          echo "版本：$VERSION"
+          echo
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
 
       ########################################
-      # Download Direct source and calculate hashes
+      # Check source changes
       ########################################
 
       - name: Check source changes
         id: check
         run: |
-
           set -e
 
+          ####################################
+          # Files
+          ####################################
+
           PROXY_SOURCE="sources/manual-proxy.list"
+
           DIRECT_LOCAL_SOURCE="sources/manual-direct.list"
 
           DIRECT_REMOTE_URL="https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt"
 
+          BUILD_SCRIPT="scripts/build.sh"
+
           PROXY_OUTPUT="output/proxy.yaml"
+
           DIRECT_OUTPUT="output/direct.yaml"
 
           VERSION_FILE="output/.mihomo-version"
-
-
-          echo "========================================"
-          echo "检查规则源"
-          echo "========================================"
-          echo
 
 
           ####################################
           # Proxy hash
           ####################################
 
-          CURRENT_PROXY_HASH=$(
-            sha256sum "$PROXY_SOURCE" \
-              | awk '{print $1}'
-          )
+          CURRENT_PROXY_HASH=$(sha256sum "$PROXY_SOURCE" \
+            | awk '{print $1}')
 
 
           ####################################
@@ -100,8 +105,7 @@ jobs:
 
           CURRENT_DIRECT_LOCAL_HASH=$(
             sha256sum "$DIRECT_LOCAL_SOURCE" 2>/dev/null \
-              | awk '{print $1}' \
-              || true
+              | awk '{print $1}' || true
           )
 
           if [ -z "$CURRENT_DIRECT_LOCAL_HASH" ]; then
@@ -116,6 +120,540 @@ jobs:
           TMP_REMOTE=$(mktemp)
 
           trap 'rm -f "$TMP_REMOTE"' EXIT
+
+          curl -fsSL \
+            "$DIRECT_REMOTE_URL" \
+            -o "$TMP_REMOTE"
+
+
+          ####################################
+          # Remote Direct hash
+          ####################################
+
+          CURRENT_DIRECT_REMOTE_HASH=$(
+            sha256sum "$TMP_REMOTE" \
+              | awk '{print $1}'
+          )
+
+
+          ####################################
+          # Combined Direct hash
+          ####################################
+
+          CURRENT_DIRECT_HASH=$(
+            printf '%s\n' \
+              "$CURRENT_DIRECT_LOCAL_HASH" \
+              "$CURRENT_DIRECT_REMOTE_HASH" \
+              | sha256sum \
+              | awk '{print $1}'
+          )
+
+
+          ####################################
+          # Build script hash
+          ####################################
+
+          CURRENT_BUILD_HASH=$(
+            sha256sum "$BUILD_SCRIPT" \
+              | awk '{print $1}'
+          )
+
+
+          ####################################
+          # Old Proxy hash
+          ####################################
+
+          OLD_PROXY_HASH=$(
+            grep "^# SOURCE-SHA256:" "$PROXY_OUTPUT" 2>/dev/null \
+              | sed 's/^# SOURCE-SHA256: //' \
+              || true
+          )
+
+
+          ####################################
+          # Old Direct hash
+          ####################################
+
+          OLD_DIRECT_HASH=$(
+            grep "^# SOURCE-SHA256:" "$DIRECT_OUTPUT" 2>/dev/null \
+              | sed 's/^# SOURCE-SHA256: //' \
+              || true
+          )
+
+
+          ####################################
+          # Old Build script hash
+          ####################################
+
+          OLD_BUILD_HASH=$(
+            git show HEAD:"$BUILD_SCRIPT" 2>/dev/null \
+              | sha256sum \
+              | awk '{print $1}' \
+              || true
+          )
+
+
+          ####################################
+          # Mihomo version
+          ####################################
+
+          CURRENT_VERSION="${{ steps.mihomo.outputs.version }}"
+
+          OLD_VERSION=$(
+            cat "$VERSION_FILE" 2>/dev/null \
+              || true
+          )
+
+
+          ####################################
+          # Display
+          ####################################
+
+          echo
+          echo "========================================"
+          echo "检查变化"
+          echo "========================================"
+          echo
+
+          echo "Proxy："
+          echo "  当前：$CURRENT_PROXY_HASH"
+          echo "  旧：  $OLD_PROXY_HASH"
+          echo
+
+          echo "Direct local："
+          echo "  当前：$CURRENT_DIRECT_LOCAL_HASH"
+          echo
+
+          echo "Direct remote："
+          echo "  当前：$CURRENT_DIRECT_REMOTE_HASH"
+          echo
+
+          echo "Direct combined："
+          echo "  当前：$CURRENT_DIRECT_HASH"
+          echo "  旧：  $OLD_DIRECT_HASH"
+          echo
+
+          echo "Build Script："
+          echo "  当前：$CURRENT_BUILD_HASH"
+          echo "  旧：  $OLD_BUILD_HASH"
+          echo
+
+          echo "Mihomo："
+          echo "  当前：$CURRENT_VERSION"
+          echo "  旧：  $OLD_VERSION"
+          echo
+
+
+          ####################################
+          # Decide whether build is required
+          ####################################
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+
+            echo "触发方式：手动运行"
+            echo "强制构建"
+
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+
+
+          elif [ "${{ github.event_name }}" = "push" ]; then
+
+            echo "触发方式：Git Push"
+
+            echo "检测到仓库文件变化"
+            echo "需要重新构建"
+
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+
+
+          elif [ "$CURRENT_PROXY_HASH" != "$OLD_PROXY_HASH" ]; then
+
+            echo "manual-proxy.list 有变化"
+            echo "需要重新构建"
+
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+
+
+          elif [ "$CURRENT_DIRECT_HASH" != "$OLD_DIRECT_HASH" ]; then
+
+            echo "Direct 规则有变化"
+            echo "需要重新构建"
+
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+
+
+          elif [ "$CURRENT_BUILD_HASH" != "$OLD_BUILD_HASH" ]; then
+
+            echo "scripts/build.sh 有变化"
+            echo "需要重新构建"
+
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+
+
+          elif [ "$CURRENT_VERSION" != "$OLD_VERSION" ]; then
+
+            echo "Mihomo 有新版本"
+            echo "需要重新构建"
+
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+
+
+          else
+
+            echo "规则、Build Script 和 Mihomo 都没有变化"
+            echo "无需构建"
+
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+
+          fi
+
+
+          ####################################
+          # Outputs
+          ####################################
+
+          echo "proxy_hash=$CURRENT_PROXY_HASH" \
+            >> "$GITHUB_OUTPUT"
+
+          echo "direct_hash=$CURRENT_DIRECT_HASH" \
+            >> "$GITHUB_OUTPUT"
+
+          echo "direct_remote_hash=$CURRENT_DIRECT_REMOTE_HASH" \
+            >> "$GITHUB_OUTPUT"
+
+          echo "build_hash=$CURRENT_BUILD_HASH" \
+            >> "$GITHUB_OUTPUT"
+
+
+      ########################################
+      # Install latest stable Mihomo
+      ########################################
+
+      - name: Install latest stable Mihomo
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          set -e
+
+          VERSION="${{ steps.mihomo.outputs.version }}"
+
+          FILE="mihomo-linux-amd64-v1-${VERSION}.gz"
+
+          URL="https://github.com/MetaCubeX/mihomo/releases/download/${VERSION}/${FILE}"
+
+
+          echo "========================================"
+          echo "安装 Mihomo"
+          echo "========================================"
+          echo
+
+          echo "版本：$VERSION"
+          echo "文件：$FILE"
+          echo "URL：$URL"
+          echo
+
+
+          wget -q \
+            --show-progress \
+            "$URL"
+
+
+          gunzip "$FILE"
+
+
+          BINARY="${FILE%.gz}"
+
+
+          chmod +x "$BINARY"
+
+
+          sudo mv \
+            "$BINARY" \
+            /usr/local/bin/mihomo
+
+
+          echo
+          echo "安装完成："
+          mihomo -v
+
+
+      ########################################
+      # Build
+      ########################################
+
+      - name: Build proxy and direct rules
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          set -e
+
+          chmod +x scripts/build.sh
+
+          ./scripts/build.sh
+
+
+      ########################################
+      # Save Mihomo version
+      ########################################
+
+      - name: Save Mihomo version
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          set -e
+
+          VERSION="${{ steps.mihomo.outputs.version }}"
+
+          echo "$VERSION" > output/.mihomo-version
+
+          echo "保存 Mihomo 版本："
+
+          cat output/.mihomo-version
+
+
+      ########################################
+      # Verify generated files
+      ########################################
+
+      - name: Verify generated files
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          set -e
+
+
+          ####################################
+          # Files
+          ####################################
+
+          PROXY_YAML="output/proxy.yaml"
+
+          PROXY_LIST="output/proxy.list"
+
+          PROXY_MRS="output/proxy.mrs"
+
+          DIRECT_YAML="output/direct.yaml"
+
+          DIRECT_LIST="output/direct.list"
+
+          DIRECT_MRS="output/direct.mrs"
+
+          VERSION_FILE="output/.mihomo-version"
+
+
+          ####################################
+          # Check files exist
+          ####################################
+
+          echo "========================================"
+          echo "检查文件"
+          echo "========================================"
+          echo
+
+
+          for FILE in \
+            "$PROXY_YAML" \
+            "$PROXY_LIST" \
+            "$PROXY_MRS" \
+            "$DIRECT_YAML" \
+            "$DIRECT_LIST" \
+            "$DIRECT_MRS" \
+            "$VERSION_FILE"
+          do
+
+            if [ ! -f "$FILE" ]; then
+
+              echo "错误：文件不存在：$FILE"
+
+              exit 1
+
+            fi
+
+            echo "OK：$FILE"
+
+          done
+
+
+          ####################################
+          # Check Proxy YAML
+          ####################################
+
+          echo
+          echo "检查 Proxy YAML..."
+
+          if grep -q '^payload:$' "$PROXY_YAML"; then
+
+            echo "Proxy YAML：payload 正常"
+
+          else
+
+            echo "错误：Proxy YAML 缺少 payload"
+
+            exit 1
+
+          fi
+
+
+          ####################################
+          # Check Direct YAML
+          ####################################
+
+          echo
+          echo "检查 Direct YAML..."
+
+          if grep -q '^payload:$' "$DIRECT_YAML"; then
+
+            echo "Direct YAML：payload 正常"
+
+          else
+
+            echo "错误：Direct YAML 缺少 payload"
+
+            exit 1
+
+          fi
+
+
+          ####################################
+          # Check important domain
+          ####################################
+
+          echo
+          echo "检查 en.rarbg-official.is..."
+
+          if grep -Fxq \
+            "en.rarbg-official.is" \
+            "$DIRECT_LIST"
+          then
+
+            echo "OK：en.rarbg-official.is 存在于 direct.list"
+
+          else
+
+            echo "错误：en.rarbg-official.is 不存在于 direct.list"
+
+            exit 1
+
+          fi
+
+
+          if grep -Fq \
+            "'en.rarbg-official.is'" \
+            "$DIRECT_YAML"
+          then
+
+            echo "OK：en.rarbg-official.is 存在于 direct.yaml"
+
+          else
+
+            echo "错误：en.rarbg-official.is 不存在于 direct.yaml"
+
+            exit 1
+
+          fi
+
+
+          ####################################
+          # Count
+          ####################################
+
+          PROXY_COUNT=$(
+            grep -c . "$PROXY_LIST" || true
+          )
+
+          DIRECT_COUNT=$(
+            grep -c . "$DIRECT_LIST" || true
+          )
+
+
+          echo
+          echo "========================================"
+          echo "规则数量"
+          echo "========================================"
+          echo
+
+          echo "Proxy LIST：$PROXY_COUNT"
+
+          echo "Direct LIST：$DIRECT_COUNT"
+
+
+          ####################################
+          # Mihomo version
+          ####################################
+
+          echo
+          echo "========================================"
+          echo "Mihomo"
+          echo "========================================"
+          echo
+
+          mihomo -v
+
+          echo
+
+          echo "保存版本："
+
+          cat "$VERSION_FILE"
+
+
+      ########################################
+      # Check whether commit is necessary
+      ########################################
+
+      - name: Check whether commit is necessary
+        if: steps.check.outputs.changed == 'true'
+        id: generated
+        run: |
+          set -e
+
+
+          ####################################
+          # Files
+          ####################################
+
+          PROXY_SOURCE="sources/manual-proxy.list"
+
+          DIRECT_LOCAL_SOURCE="sources/manual-direct.list"
+
+          DIRECT_REMOTE_URL="https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt"
+
+          BUILD_SCRIPT="scripts/build.sh"
+
+          PROXY_OUTPUT="output/proxy.yaml"
+
+          DIRECT_OUTPUT="output/direct.yaml"
+
+          VERSION_FILE="output/.mihomo-version"
+
+
+          ####################################
+          # Current hashes
+          ####################################
+
+          CURRENT_PROXY_HASH=$(
+            sha256sum "$PROXY_SOURCE" \
+              | awk '{print $1}'
+          )
+
+
+          CURRENT_DIRECT_LOCAL_HASH=$(
+            sha256sum "$DIRECT_LOCAL_SOURCE" 2>/dev/null \
+              | awk '{print $1}' \
+              || true
+          )
+
+
+          if [ -z "$CURRENT_DIRECT_LOCAL_HASH" ]; then
+
+            CURRENT_DIRECT_LOCAL_HASH="EMPTY"
+
+          fi
+
+
+          ####################################
+          # Remote Direct
+          ####################################
+
+          TMP_REMOTE=$(mktemp)
+
+          trap 'rm -f "$TMP_REMOTE"' EXIT
+
 
           curl -fsSL \
             "$DIRECT_REMOTE_URL" \
@@ -142,273 +680,17 @@ jobs:
 
 
           ####################################
-          # Read old hashes
+          # Current Build Script hash
           ####################################
 
-          OLD_PROXY_HASH=$(
-            grep "^# SOURCE-SHA256:" "$PROXY_OUTPUT" 2>/dev/null \
-              | sed 's/^# SOURCE-SHA256: //' \
-              || true
-          )
-
-
-          OLD_DIRECT_HASH=$(
-            grep "^# SOURCE-SHA256:" "$DIRECT_OUTPUT" 2>/dev/null \
-              | sed 's/^# SOURCE-SHA256: //' \
-              || true
-          )
-
-
-          ####################################
-          # Mihomo
-          ####################################
-
-          CURRENT_VERSION="${{ steps.mihomo.outputs.version }}"
-
-          OLD_VERSION=$(
-            cat "$VERSION_FILE" 2>/dev/null \
-              || true
-          )
-
-
-          ####################################
-          # Show information
-          ####################################
-
-          echo "Proxy："
-          echo "  当前：$CURRENT_PROXY_HASH"
-          echo "  旧：  $OLD_PROXY_HASH"
-
-          echo
-
-          echo "Direct local："
-          echo "  当前：$CURRENT_DIRECT_LOCAL_HASH"
-
-          echo
-
-          echo "Direct remote："
-          echo "  当前：$CURRENT_DIRECT_REMOTE_HASH"
-
-          echo
-
-          echo "Direct combined："
-          echo "  当前：$CURRENT_DIRECT_HASH"
-          echo "  旧：  $OLD_DIRECT_HASH"
-
-          echo
-
-          echo "Mihomo："
-          echo "  当前：$CURRENT_VERSION"
-          echo "  旧：  $OLD_VERSION"
-
-          echo
-
-
-          ####################################
-          # Decide whether build is needed
-          ####################################
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-
-            echo "手动运行"
-            echo "强制构建"
-
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-
-          elif [ "$CURRENT_PROXY_HASH" != "$OLD_PROXY_HASH" ]; then
-
-            echo "manual-proxy.list 有变化"
-
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-
-          elif [ "$CURRENT_DIRECT_HASH" != "$OLD_DIRECT_HASH" ]; then
-
-            echo "Direct 规则有变化"
-
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-
-          elif [ "$CURRENT_VERSION" != "$OLD_VERSION" ]; then
-
-            echo "Mihomo 有新版本"
-
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-
-          else
-
-            echo "规则和 Mihomo 都没有变化"
-
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-
-          fi
-
-
-          ####################################
-          # Export hashes
-          ####################################
-
-          echo "proxy_hash=$CURRENT_PROXY_HASH" >> "$GITHUB_OUTPUT"
-
-          echo "direct_hash=$CURRENT_DIRECT_HASH" >> "$GITHUB_OUTPUT"
-
-          echo "direct_remote_hash=$CURRENT_DIRECT_REMOTE_HASH" >> "$GITHUB_OUTPUT"
-
-
-      ########################################
-      # Install Mihomo
-      ########################################
-
-      - name: Install latest stable Mihomo
-        if: steps.check.outputs.changed == 'true'
-        run: |
-
-          set -e
-
-          VERSION="${{ steps.mihomo.outputs.version }}"
-
-          FILE="mihomo-linux-amd64-v1-${VERSION}.gz"
-
-          URL="https://github.com/MetaCubeX/mihomo/releases/download/${VERSION}/${FILE}"
-
-
-          echo "========================================"
-          echo "安装 Mihomo"
-          echo "========================================"
-          echo
-
-          echo "版本：$VERSION"
-          echo "文件：$FILE"
-          echo "URL：$URL"
-          echo
-
-
-          wget -q --show-progress "$URL"
-
-          gunzip "$FILE"
-
-          BINARY="${FILE%.gz}"
-
-          chmod +x "$BINARY"
-
-          sudo mv "$BINARY" /usr/local/bin/mihomo
-
-
-          echo
-          echo "安装完成："
-
-          mihomo -v
-
-
-      ########################################
-      # Build
-      ########################################
-
-      - name: Build proxy and direct rules
-        if: steps.check.outputs.changed == 'true'
-        run: |
-
-          set -e
-
-          chmod +x scripts/build.sh
-
-          ./scripts/build.sh
-
-
-      ########################################
-      # Save Mihomo version
-      ########################################
-
-      - name: Save Mihomo version
-        if: steps.check.outputs.changed == 'true'
-        run: |
-
-          set -e
-
-          echo "${{ steps.mihomo.outputs.version }}" \
-            > output/.mihomo-version
-
-
-          echo "保存 Mihomo 版本："
-
-          cat output/.mihomo-version
-
-
-      ########################################
-      # Check generated result
-      ########################################
-
-      - name: Check generated files
-        if: steps.check.outputs.changed == 'true'
-        id: generated
-        run: |
-
-          set -e
-
-          PROXY_SOURCE="sources/manual-proxy.list"
-
-          DIRECT_LOCAL_SOURCE="sources/manual-direct.list"
-
-          DIRECT_REMOTE_URL="https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt"
-
-          PROXY_OUTPUT="output/proxy.yaml"
-
-          DIRECT_OUTPUT="output/direct.yaml"
-
-          VERSION_FILE="output/.mihomo-version"
-
-
-          echo "========================================"
-          echo "检查生成结果"
-          echo "========================================"
-          echo
-
-
-          ####################################
-          # Current hashes
-          ####################################
-
-          CURRENT_PROXY_HASH=$(
-            sha256sum "$PROXY_SOURCE" \
-              | awk '{print $1}'
-          )
-
-
-          CURRENT_DIRECT_LOCAL_HASH=$(
-            sha256sum "$DIRECT_LOCAL_SOURCE" 2>/dev/null \
-              | awk '{print $1}' \
-              || true
-          )
-
-          if [ -z "$CURRENT_DIRECT_LOCAL_HASH" ]; then
-            CURRENT_DIRECT_LOCAL_HASH="EMPTY"
-          fi
-
-
-          TMP_REMOTE=$(mktemp)
-
-          trap 'rm -f "$TMP_REMOTE"' EXIT
-
-          curl -fsSL \
-            "$DIRECT_REMOTE_URL" \
-            -o "$TMP_REMOTE"
-
-
-          CURRENT_DIRECT_REMOTE_HASH=$(
-            sha256sum "$TMP_REMOTE" \
-              | awk '{print $1}'
-          )
-
-
-          CURRENT_DIRECT_HASH=$(
-            printf '%s\n' \
-              "$CURRENT_DIRECT_LOCAL_HASH" \
-              "$CURRENT_DIRECT_REMOTE_HASH" \
-              | sha256sum \
+          CURRENT_BUILD_HASH=$(
+            sha256sum "$BUILD_SCRIPT" \
               | awk '{print $1}'
           )
 
 
           ####################################
-          # Old hashes from git
+          # Old hashes from HEAD
           ####################################
 
           OLD_PROXY_HASH=$(
@@ -427,7 +709,12 @@ jobs:
           )
 
 
-          CURRENT_VERSION="${{ steps.mihomo.outputs.version }}"
+          OLD_BUILD_HASH=$(
+            git show HEAD:"$BUILD_SCRIPT" 2>/dev/null \
+              | sha256sum \
+              | awk '{print $1}' \
+              || true
+          )
 
 
           OLD_VERSION=$(
@@ -436,26 +723,37 @@ jobs:
           )
 
 
+          CURRENT_VERSION="${{ steps.mihomo.outputs.version }}"
+
+
           ####################################
-          # Show
+          # Display
           ####################################
+
+          echo
+          echo "========================================"
+          echo "最终提交检查"
+          echo "========================================"
+          echo
 
           echo "Proxy："
           echo "  当前：$CURRENT_PROXY_HASH"
           echo "  旧：  $OLD_PROXY_HASH"
-
           echo
 
           echo "Direct："
           echo "  当前：$CURRENT_DIRECT_HASH"
           echo "  旧：  $OLD_DIRECT_HASH"
+          echo
 
+          echo "Build Script："
+          echo "  当前：$CURRENT_BUILD_HASH"
+          echo "  旧：  $OLD_BUILD_HASH"
           echo
 
           echo "Mihomo："
           echo "  当前：$CURRENT_VERSION"
           echo "  旧：  $OLD_VERSION"
-
           echo
 
 
@@ -465,17 +763,30 @@ jobs:
 
           if [ "$CURRENT_PROXY_HASH" = "$OLD_PROXY_HASH" ] && \
              [ "$CURRENT_DIRECT_HASH" = "$OLD_DIRECT_HASH" ] && \
+             [ "$CURRENT_BUILD_HASH" = "$OLD_BUILD_HASH" ] && \
              [ "$CURRENT_VERSION" = "$OLD_VERSION" ]; then
 
-            echo "规则和 Mihomo 都没有变化"
-            echo "本次仅可能是 UPDATED 时间变化"
+            echo "========================================"
+            echo "没有实际变化"
+            echo "========================================"
+            echo
+
+            echo "规则没有变化"
+            echo "Build Script 没有变化"
+            echo "Mihomo 没有变化"
+            echo
+
+            echo "本次可能只是 UPDATED 时间变化"
             echo "不提交"
 
             echo "commit=false" >> "$GITHUB_OUTPUT"
 
           else
 
-            echo "规则或 Mihomo 发生变化"
+            echo "========================================"
+            echo "检测到实际变化"
+            echo "========================================"
+            echo
 
             echo "允许提交"
 
@@ -491,21 +802,34 @@ jobs:
       - name: Commit changes
         if: steps.check.outputs.changed == 'true' && steps.generated.outputs.commit == 'true'
         run: |
-
           set -e
+
 
           echo "========================================"
           echo "提交生成结果"
           echo "========================================"
+          echo
 
 
-          git config user.name "github-actions[bot]"
+          ####################################
+          # Git identity
+          ####################################
 
-          git config user.email \
+          git config \
+            user.name \
+            "github-actions[bot]"
+
+          git config \
+            user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
 
 
+          ####################################
+          # Add files
+          ####################################
+
           git add \
+            scripts/build.sh \
             output/proxy.yaml \
             output/proxy.list \
             output/proxy.mrs \
@@ -515,12 +839,25 @@ jobs:
             output/.mihomo-version
 
 
+          ####################################
+          # Check staged changes
+          ####################################
+
           if git diff --cached --quiet; then
 
             echo "生成结果没有变化"
+
             echo "不需要提交"
 
           else
+
+            echo
+            echo "即将提交："
+            echo
+
+            git status --short
+
+            echo
 
             git commit \
               -m "update proxy and direct rules"
@@ -537,7 +874,6 @@ jobs:
       - name: No changes
         if: steps.check.outputs.changed == 'false'
         run: |
-
           echo "========================================"
           echo "无需更新"
           echo "========================================"
@@ -545,8 +881,8 @@ jobs:
 
           echo "Proxy 规则没有变化"
           echo "Direct 规则没有变化"
+          echo "Build Script 没有变化"
           echo "Mihomo 没有变化"
-
           echo
 
           echo "跳过构建"
