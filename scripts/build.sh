@@ -116,10 +116,6 @@ echo "========================================"
 echo
 
 
-########################################
-# Clean proxy source
-########################################
-
 grep -v '^[[:space:]]*$' "$PROXY_SOURCE" \
     | grep -v '^[[:space:]]*#' \
     | sed 's/[[:space:]]*#.*$//' \
@@ -128,19 +124,11 @@ grep -v '^[[:space:]]*$' "$PROXY_SOURCE" \
     > "$TMP_PROXY_RAW"
 
 
-########################################
-# Remove rule prefixes
-########################################
-
 sed -i \
     -e 's/^DOMAIN-SUFFIX,//' \
     -e 's/^DOMAIN,//' \
     "$TMP_PROXY_RAW"
 
-
-########################################
-# Proxy IDN
-########################################
 
 python3 - "$TMP_PROXY_RAW" "$TMP_PROXY_IDN" <<'PY'
 import sys
@@ -175,10 +163,6 @@ print(f"Proxy IDN 转换后：{count}")
 PY
 
 
-########################################
-# Proxy sort / deduplicate
-########################################
-
 sort -u "$TMP_PROXY_IDN" > "$TMP_PROXY_SORTED"
 
 PROXY_COUNT=$(grep -c . "$TMP_PROXY_SORTED" || true)
@@ -192,7 +176,7 @@ echo
 
 
 ########################################
-# Build Direct - local
+# Direct local
 ########################################
 
 echo "========================================"
@@ -216,10 +200,6 @@ else
 
 fi
 
-
-########################################
-# Remove local rule prefixes
-########################################
 
 sed -i \
     -e 's/^DOMAIN-SUFFIX,//' \
@@ -291,7 +271,6 @@ with open(output_file, "w", encoding="utf-8") as out:
 
             line = line.strip()
 
-            # Ignore payload:
             if not line.startswith("-"):
                 continue
 
@@ -300,7 +279,6 @@ with open(output_file, "w", encoding="utf-8") as out:
             if not value:
                 continue
 
-            # Remove YAML single/double quotes
             if len(value) >= 2:
 
                 if value[0] == "'" and value[-1] == "'":
@@ -352,6 +330,26 @@ PY
 
 
 ########################################
+# IMPORTANT:
+# Calculate remote count in shell
+########################################
+
+REMOTE_DIRECT_COUNT=$(awk '
+    BEGIN {
+        count = 0
+    }
+
+    /^[[:space:]]*-[[:space:]]/ {
+        count++
+    }
+
+    END {
+        print count
+    }
+' "$TMP_DIRECT_REMOTE")
+
+
+########################################
 # Direct IDN
 ########################################
 
@@ -382,6 +380,7 @@ with open(src, "r", encoding="utf-8") as f, \
         if domain.startswith("+."):
             prefix = "+."
             domain = domain[2:]
+
 
         ################################
         # IDN conversion
@@ -430,6 +429,7 @@ DIRECT_LOCAL_SHA256=$(
         || true
 )
 
+
 if [ -z "$DIRECT_LOCAL_SHA256" ]; then
     DIRECT_LOCAL_SHA256="EMPTY"
 fi
@@ -445,7 +445,7 @@ DIRECT_COMBINED_SHA256=$(
 
 
 ########################################
-# Updated timestamp
+# Timestamp
 ########################################
 
 UPDATED=$(TZ="Asia/Shanghai" date +"%Y-%m-%d %H:%M:%S CST")
@@ -629,6 +629,7 @@ echo "Proxy："
 echo "  proxy.yaml：$PROXY_YAML_CHANGED"
 echo "  proxy.list：$PROXY_LIST_CHANGED"
 echo "  proxy.mrs：$PROXY_MRS_CHANGED"
+
 
 echo
 echo "Direct："
