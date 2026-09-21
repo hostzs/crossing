@@ -293,7 +293,6 @@ jobs:
 
           URL="https://github.com/MetaCubeX/mihomo/releases/download/${VERSION}/${FILE}"
 
-
           echo "========================================"
           echo "安装 Mihomo"
           echo "========================================"
@@ -303,25 +302,19 @@ jobs:
           echo "文件：$FILE"
           echo
 
-
           wget -q \
             --show-progress \
             "$URL"
 
-
           gunzip "$FILE"
-
 
           BINARY="${FILE%.gz}"
 
-
           chmod +x "$BINARY"
-
 
           sudo mv \
             "$BINARY" \
             /usr/local/bin/mihomo
-
 
           echo
           echo "安装完成："
@@ -462,15 +455,15 @@ jobs:
           echo "检查 en.rarbg-official.is..."
 
           if grep -Fxq \
-            "en.rarbg-official.is" \
+            "+.en.rarbg-official.is" \
             "$DIRECT_LIST"
           then
 
-            echo "OK：en.rarbg-official.is 存在于 direct.list"
+            echo "OK：+.en.rarbg-official.is 存在于 direct.list"
 
           else
 
-            echo "错误：en.rarbg-official.is 不存在于 direct.list"
+            echo "错误：+.en.rarbg-official.is 不存在于 direct.list"
 
             exit 1
 
@@ -478,15 +471,15 @@ jobs:
 
 
           if grep -Fq \
-            "'en.rarbg-official.is'" \
+            "'+.en.rarbg-official.is'" \
             "$DIRECT_YAML"
           then
 
-            echo "OK：en.rarbg-official.is 存在于 direct.yaml"
+            echo "OK：+.en.rarbg-official.is 存在于 direct.yaml"
 
           else
 
-            echo "错误：en.rarbg-official.is 不存在于 direct.yaml"
+            echo "错误：+.en.rarbg-official.is 不存在于 direct.yaml"
 
             exit 1
 
