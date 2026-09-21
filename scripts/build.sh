@@ -148,6 +148,22 @@ with open(src, "r", encoding="utf-8") as f, \
         if not domain:
             continue
 
+        ################################
+        # Normalize "+." prefix
+        #
+        # Always generate Clash domain
+        # rules as +.example.com so that
+        # the base domain and all of its
+        # subdomains are matched.
+        ################################
+
+        if domain.startswith("+."):
+            domain = domain[2:]
+
+        ################################
+        # IDN conversion
+        ################################
+
         try:
             domain = domain.encode("idna").decode("ascii")
         except Exception:
@@ -156,7 +172,7 @@ with open(src, "r", encoding="utf-8") as f, \
         domain = domain.rstrip(".")
 
         if domain:
-            out.write(domain + "\n")
+            out.write("+." + domain + "\n")
             count += 1
 
 print(f"Proxy IDN 转换后：{count}")
@@ -371,13 +387,16 @@ with open(src, "r", encoding="utf-8") as f, \
             continue
 
         ################################
-        # Keep "+." prefix
+        # Normalize "+." prefix
+        #
+        # Strip any existing prefix first,
+        # then add exactly one +. after IDN
+        # conversion. This prevents +.+.
+        # and also upgrades remote rules
+        # which do not already have +..
         ################################
 
-        prefix = ""
-
         if domain.startswith("+."):
-            prefix = "+."
             domain = domain[2:]
 
 
@@ -395,7 +414,7 @@ with open(src, "r", encoding="utf-8") as f, \
         if not domain:
             continue
 
-        out.write(prefix + domain + "\n")
+        out.write("+." + domain + "\n")
 
         count += 1
 
@@ -615,10 +634,30 @@ fi
 # Verify important Direct domain
 ########################################
 
-if grep -Fxq "en.rarbg-official.is" "$DIRECT_LIST"; then
-    echo "Direct 检查：en.rarbg-official.is 存在"
+if grep -Fxq "+.en.rarbg-official.is" "$DIRECT_LIST"; then
+    echo "Direct 检查：+.en.rarbg-official.is 存在"
 else
-    echo "警告：en.rarbg-official.is 不存在于 direct.list"
+    echo "警告：+.en.rarbg-official.is 不存在于 direct.list"
+fi
+
+
+########################################
+# Verify generated rules use +. prefix
+########################################
+
+if grep -v '^#' "$PROXY_LIST" | grep -v '^$' | grep -vq '^\+\.'; then
+    echo "错误：Proxy LIST 存在未使用 +. 前缀的规则"
+    exit 1
+else
+    echo "Proxy 检查：规则均使用 +. 前缀"
+fi
+
+
+if grep -v '^#' "$DIRECT_LIST" | grep -v '^$' | grep -vq '^\+\.'; then
+    echo "错误：Direct LIST 存在未使用 +. 前缀的规则"
+    exit 1
+else
+    echo "Direct 检查：规则均使用 +. 前缀"
 fi
 
 
