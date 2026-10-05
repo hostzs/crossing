@@ -1,9 +1,9 @@
 # NAME: direct
 # AUTHOR: edward
 # REPO: https://github.com/hostzs/crossing
-# UPDATED: 2026-10-01 04:21:10 CST
-# SOURCE-SHA256: b2b7a661b73251ec5ec54de245531d56326747bcfc3195c340ea95a61186b2a5
-# COUNT: 111305
+# UPDATED: 2026-10-05 17:59:47 CST
+# SOURCE-SHA256: aa94a04c594ac57d157d8b570f2322a39414ff09ca4863c5bef3616dc0a9f47d
+# COUNT: 111306
 # REMOTE-SOURCE: https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt
 # REMOTE-SHA256: e1664a48aa5ffc62bd4941787db59446335cc933d3c39ff083e4000ae9c5993b
 #
@@ -1258,6 +1258,7 @@
 +.1026jz.com
 +.102no.com
 +.102pay.com
++.103.11.9.33
 +.103153.com
 +.10333.com
 +.10349.com
