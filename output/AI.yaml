@@ -58,6 +58,7 @@ payload:
   - DOMAIN-SUFFIX,location.microsoft.com
   - DOMAIN-SUFFIX,makersuite.google.com
   - DOMAIN-SUFFIX,mistral.ai
+  - DOMAIN-SUFFIX,muse.ai
   - DOMAIN-SUFFIX,oaistatic.com
   - DOMAIN-SUFFIX,oaiusercontent.com
   - DOMAIN-SUFFIX,observeit.net
