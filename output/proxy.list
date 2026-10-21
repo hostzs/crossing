@@ -1,11 +1,12 @@
 # NAME: proxy
 # AUTHOR: edward
 # REPO: https://github.com/hostzs/crossing
-# UPDATED: 2026-10-21 08:31:24 CST
-# SOURCE-SHA256: e1927b72a37496678a894e97ee6b85e8ac8e9fe04edac0518b87fd19ffe4940e
-# COUNT: 22
+# UPDATED: 2026-10-21 10:41:44 CST
+# SOURCE-SHA256: 7421f6dc4c5c7174b75a68deb00c4906aab7f905ee6ff0e8d9ae0e90055172b9
+# COUNT: 23
 #
 +.archive.org
++.bonjourr.fr
 +.brookings.edu
 +.dg4.org
 +.eixeix.com
