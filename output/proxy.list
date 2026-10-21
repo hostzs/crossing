@@ -1,9 +1,9 @@
 # NAME: proxy
 # AUTHOR: edward
 # REPO: https://github.com/hostzs/crossing
-# UPDATED: 2026-10-21 10:41:44 CST
-# SOURCE-SHA256: 7421f6dc4c5c7174b75a68deb00c4906aab7f905ee6ff0e8d9ae0e90055172b9
-# COUNT: 23
+# UPDATED: 2026-10-21 15:28:22 CST
+# SOURCE-SHA256: 75e0d2939c66ab7eb181e2b3e4c2a03e1638707dcdda7c9ba1e63aefcde7af89
+# COUNT: 24
 #
 +.archive.org
 +.bonjourr.fr
@@ -23,6 +23,7 @@
 +.owdzmwy.com
 +.snopes.com
 +.ssrdog.com
++.swift.org
 +.unity.com
 +.unity3d.com
 +.xn--44q907fa2408a.com
