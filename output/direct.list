@@ -1,11 +1,11 @@
 # NAME: direct
 # AUTHOR: edward
 # REPO: https://github.com/hostzs/crossing
-# UPDATED: 2026-10-20 16:18:56 CST
-# SOURCE-SHA256: 33e5ba9fd5a6c4db1af9ae437e85fbf1e9e3ff0ce8a55e0a386c481890030e0a
-# COUNT: 110470
+# UPDATED: 2026-10-21 08:31:24 CST
+# SOURCE-SHA256: 317dc79ebebc40e01e82cc6f4740e10886d53cdfc84964655442caebf43dcfe0
+# COUNT: 110473
 # REMOTE-SOURCE: https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt
-# REMOTE-SHA256: 887a3e47bd7d47629a62e6d7a55f420a960e83ee4cbcabe70bd8b4ef54ca912b
+# REMOTE-SHA256: 3a49ab7a5daa5a92895c65bd5f7c71b61f4b9ea8c548bf73225c207c3bf06ceb
 #
 +.0.zone
 +.00.net
@@ -36159,6 +36159,7 @@
 +.gaoligroup.com
 +.gaolihanjie.com
 +.gaolouimg.com
++.gaoloumi.cc
 +.gaomaipharma.com
 +.gaomeif.com
 +.gaomeluo.com
@@ -85723,6 +85724,8 @@
 +.szty56.com
 +.sztz.org
 +.sztzzs.com
++.szu.app
++.szu.moe
 +.szuavia.org
 +.szudad.com
 +.szunionlab.com
