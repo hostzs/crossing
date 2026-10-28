@@ -1,11 +1,11 @@
 # NAME: direct
 # AUTHOR: edward
 # REPO: https://github.com/hostzs/crossing
-# UPDATED: 2026-10-28 04:16:24 CST
-# SOURCE-SHA256: 110a3cb071cae5201bc11da6c66babf812761dca4f3d0036d65c38e3de447dc7
+# UPDATED: 2026-10-28 21:52:32 CST
+# SOURCE-SHA256: 187c954b9d92b9a650d501482ac1c9acbf177b46dd4363d62bb0ff7991421ed2
 # COUNT: 110198
 # REMOTE-SOURCE: https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt
-# REMOTE-SHA256: 7913d262b6df457bcbe7a71f85401ff83a4af5cf6664962e8a4c77199d3881ab
+# REMOTE-SHA256: e6dadb814ef091fda49a3bd7d2502771fcd995b8d1986ef318af10e11187982d
 #
 +.0.zone
 +.00.net
@@ -61157,8 +61157,6 @@
 +.longanlaw.com
 +.longau.com
 +.longbenren.com
-+.longbridgeapp.com
-+.longbridgehk.com
 +.longcai.com
 +.longcai027.com
 +.longcat.chat
@@ -79028,7 +79026,9 @@
 +.sh-oca.com
 +.sh-pet.com
 +.sh-pn.com
++.sh-pod1-smp-device.apple.com
 +.sh-pod2-smp-device.apple.com
++.sh-pod3-smp-device.apple.com
 +.sh-pp.com
 +.sh-printing.com
 +.sh-prosperity.com
