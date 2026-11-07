@@ -1,11 +1,11 @@
 # NAME: direct
 # AUTHOR: edward
 # REPO: https://github.com/hostzs/crossing
-# UPDATED: 2026-11-04 05:18:50 CST
-# SOURCE-SHA256: deb23383718c5dae9b5c05ce16318dc8b10a136730b6f7043298a6efd2e3b80d
-# COUNT: 110144
+# UPDATED: 2026-11-08 03:41:41 CST
+# SOURCE-SHA256: 8537d2f474fc88298dea20839544980478d3f692d37144ff2e5ec4da748aeae9
+# COUNT: 110143
 # REMOTE-SOURCE: https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt
-# REMOTE-SHA256: 2ff0b806e1ba3f302ea14f2297230eb46bfb279412748db5c31cf6593013a5f3
+# REMOTE-SHA256: 9c6a8d102667ea8543e4f47d9075ea0100fa4b6ea4ff568238f7777d52ad8ca5
 #
 +.0.zone
 +.00.net
@@ -16918,6 +16918,7 @@
 +.bsdongxin.com
 +.bsdt1688.com
 +.bsehk.com
++.bseinfo.net
 +.bseqp.com
 +.bserc.com
 +.bsgcnc.com
@@ -21847,7 +21848,6 @@
 +.chuxinvip.com
 +.chuxueyun.com
 +.chuyaer.com
-+.chuyu.me
 +.chuzhaobiao.com
 +.chvacuum.com
 +.chvoice.com
@@ -35636,14 +35636,12 @@
 +.gamehaopu.com
 +.gamehome.tv
 +.gameinns.com
-+.gameitop.com
 +.gamejym.com
 +.gamekee.com
 +.gamekezhan.com
 +.gamekuaishou.com
 +.gamelet.games
 +.gameley.com
-+.gameloop.com
 +.gameloop.fun
 +.gamemale.com
 +.gamemcu.com
@@ -49938,7 +49936,6 @@
 +.in-tencentclb.com
 +.in-tencentclb.net
 +.in-tencentclb.work
-+.in.th
 +.in001.com
 +.in66.com
 +.in800.com
@@ -61820,6 +61817,7 @@
 +.luyinla.com
 +.luyinzhushou.com
 +.luyitong.com
++.luyong.com
 +.luyor.net
 +.luyouqi.com
 +.luyouwang.com
@@ -62619,9 +62617,6 @@
 +.magpiepharma.com
 +.magtechjournal.com
 +.magvision.com
-+.mahjongai.net
-+.mahjongcup.com
-+.mahjongcup.net
 +.mahoupao.com
 +.mahua.com
 +.mai.com
@@ -72150,7 +72145,6 @@
 +.proup.club
 +.providence-chemicals.com
 +.prowine-shanghai.com
-+.proximabeta.com
 +.proya-group.com
 +.proya.com
 +.proyy.com
@@ -75226,6 +75220,7 @@
 +.radiate-electronics.com
 +.radida.com
 +.radilush.com
++.radio.itunes.apple.com
 +.radio1964.com
 +.radio366.com
 +.radiotj.com
@@ -78609,6 +78604,7 @@
 +.senra.me
 +.sense-hk.com
 +.senseagro.com
++.senseavatar.com
 +.senselock.com
 +.senseluxury.com
 +.senser.group
@@ -80869,6 +80865,7 @@
 +.shutu.cc
 +.shutwin.com
 +.shuwangxing.com
++.shuwen.com
 +.shuwenxianyun.com
 +.shuwulou.com
 +.shuxiangmuye.com
@@ -86964,8 +86961,6 @@
 +.tetuijiudian.com
 +.tevachem.com
 +.tex68.com
-+.texasholdemcup.com
-+.texasholdemcup.net
 +.texpage.com
 +.texpageusercontent.com
 +.texpro-group.com
@@ -87572,6 +87567,7 @@
 +.tidemedia.com
 +.tidepharm.com
 +.tidesec.com
++.tidesight.com
 +.tideswing.fun
 +.tidi.mobi
 +.tiduyun.com
@@ -90641,6 +90637,7 @@
 +.upsapp.com
 +.upseller.com
 +.upskyshanghai.com
++.upsort.com
 +.upst86.com
 +.uptom.com
 +.uptougu.com
@@ -104468,6 +104465,7 @@
 +.yundonghao.com
 +.yundongit.com
 +.yundousoft.com
++.yundouxueyuan.com
 +.yundui.cc
 +.yunduimedia.com
 +.yundun.com
@@ -105117,6 +105115,7 @@
 +.yy960.com
 +.yyaotec.com
 +.yyarea.com
++.yybip.com
 +.yyblly.com
 +.yybnet.net
 +.yybox.cc
