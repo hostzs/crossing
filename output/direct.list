@@ -1,11 +1,11 @@
 # NAME: direct
 # AUTHOR: edward
 # REPO: https://github.com/hostzs/crossing
-# UPDATED: 2026-11-16 04:37:18 CST
-# SOURCE-SHA256: 9a64fae9e66d2dbc26c02d402ffdd44e3bb6f939aa9cbeb175d5e86d15546370
-# COUNT: 110194
+# UPDATED: 2026-11-17 07:52:12 CST
+# SOURCE-SHA256: 5510b974bc44baf166f23737f4556850ecfa7c9d570dcb3f4516a35619000a2a
+# COUNT: 110198
 # REMOTE-SOURCE: https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt
-# REMOTE-SHA256: 4912af85f480d65a79734c72235bd451e71cc394f7f2979b556ad584e7711fe8
+# REMOTE-SHA256: 66fcabd34a05f1865e2b658fa0f6f7ccb0c297b9feb7721685f038ac17dd93c2
 #
 +.0.zone
 +.00.net
@@ -18078,6 +18078,7 @@
 +.capsuleshanghai.com
 +.captain-cro.com
 +.captainbi.com
++.captive.apple.com
 +.capturetheflag.fun
 +.capvision.com
 +.capwhale.com
@@ -24021,6 +24022,7 @@
 +.conew.com
 +.configuration.apple.com
 +.configuration.apple.com.akadns.net
++.configuration.ls.apple.com
 +.confluxrpc.com
 +.conghua.com
 +.congmiqq.com
@@ -65855,6 +65857,7 @@
 +.musiceol.com
 +.musicgw.com
 +.musiclemon.net
++.musicstatus.itunes.apple.com
 +.musicstatus.music.apple.com
 +.musiness.vip
 +.muslimwww.com
@@ -66406,6 +66409,7 @@
 +.mzsmn.com
 +.mzsrmyy.com
 +.mzssysmyxgs.com
++.mzstorekit.itunes.apple.com
 +.mzsvn.com
 +.mztgame.com
 +.mztspa.com
